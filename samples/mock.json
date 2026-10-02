@@ -1,0 +1,33 @@
+{
+  "limits": {
+    "standard": {
+      "fiveHour": {
+        "usedPercent": 58,
+        "windowEnd": "2026-10-02T17:46:56.3848730+00:00"
+      },
+      "weekly": {
+        "usedPercent": 40,
+        "windowEnd": "2026-10-04T23:35:56.3848729+00:00"
+      },
+      "monthly": {
+        "usedPercent": 20,
+        "windowEnd": "2026-10-27T21:11:56.3848729+00:00"
+      }
+    },
+    "core": {
+      "fiveHour": {
+        "usedPercent": 92,
+        "windowEnd": "2026-10-02T17:03:56.3848730+00:00"
+      },
+      "weekly": {
+        "usedPercent": 15,
+        "windowEnd": "2026-10-04T23:35:56.3848729+00:00"
+      },
+      "monthly": {
+        "usedPercent": 4,
+        "windowEnd": "2026-10-27T21:11:56.3848729+00:00"
+      }
+    }
+  },
+  "extraUsageBalanceCents": 0
+}

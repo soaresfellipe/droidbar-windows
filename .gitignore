@@ -1,0 +1,7 @@
+# build outputs
+DroidBar.exe
+src/droid-bar.ico
+*.zip
+
+# preview renders other than the README screenshot
+docs/*-icon.png
