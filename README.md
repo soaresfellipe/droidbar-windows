@@ -2,7 +2,7 @@
 
 A small Windows tray app that shows your [Factory](https://factory.ai) Droid usage limits (5-hour, weekly and monthly, for both **Standard** and **Droid Core**) and notifies you when you get close to a limit.
 
-![Droid Bar popup](docs/popup.png)
+![Droid Bar popup above the Windows taskbar](docs/screenshot.png)
 
 > Unofficial. Not affiliated with or endorsed by Factory. It reads the same `/api/billing/limits` endpoint the Droid CLI uses. That endpoint isn't documented and may change.
 
