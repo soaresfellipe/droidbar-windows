@@ -52,6 +52,9 @@ jobs:
           Copy-Item (Join-Path $root 'README.md')               $pkg
           Copy-Item (Join-Path $root 'LICENSE')                 $pkg
 
+          # ZipFile lives in System.IO.Compression.FileSystem.dll; ZipArchiveMode and
+          # ZipArchive live in System.IO.Compression.dll, so both are loaded.
+          Add-Type -AssemblyName System.IO.Compression
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           # Build the archive entry-by-entry with explicit forward-slash names:
           # CreateFromDirectory on .NET Framework 4 writes 'src\file.psm1' with a
