@@ -9,7 +9,8 @@ A small Windows tray app that shows your [Factory](https://factory.ai) Droid usa
 ## Features
 
 - **Tray icon with your current usage.** It shows the highest Standard percentage and changes color as you approach the limit: dark below 75%, orange from 75%, red from 90%. Hover it for a summary.
-- **Popup on left click**, styled like Factory's own usage page, with Standard / Droid Core tabs and the time left until each window resets.
+- **Popup on left click**, styled like Factory's own usage page, with Standard / Droid Core / Computer tabs and the time left until each window resets.
+- **Computer tab**, display-only: a summary line (e.g. `3 computers · 3 active`) and one row per Droid Computer with its name, provider type and a color-coded status chip. There is no hours balance for Droid Computers — their compute counts toward the Standard windows — so this tab shows status, not a meter. Computers never trigger notifications.
 - **Notifications** when a limit crosses 75%, 90% and 100% (once per threshold), and when a maxed-out limit becomes available again.
 - **Right-click menu**: refresh now, open the Factory dashboard, set API key, start with Windows, quit.
 - Nothing to install. It runs on Windows PowerShell 5.1 and .NET Framework, which ship with Windows 10/11.
@@ -68,6 +69,7 @@ Settings live in `%APPDATA%\droid-bar\config.json` (right-click → **Open setti
 | `notifyPools` | `["standard", "core"]` | Which limit pools send notifications. |
 | `trayPool` | `"standard"` | Which pool the tray icon number reflects. |
 | `apiBase` | `"https://api.factory.ai"` | API base URL. |
+| `apiKeyProtected` | *(empty)* | The API key, encrypted with DPAPI. Set through **Set API key** in the right-click menu rather than by hand. |
 
 The `FACTORY_API_KEY` environment variable, if set, takes precedence over the stored key.
 
@@ -89,6 +91,7 @@ Developer flags:
 | --- | --- |
 | `-Mock samples\mock.json` | Use a local JSON file instead of the API. |
 | `-Preview out.png` | Render the popup (and tray icon) to PNG and exit. |
+| `-PreviewTab <id>` | With `-Preview`: which tab to render — `standard` (default), `core` or `computer`. |
 | `-Dump` | Print the raw API response and exit. |
 
 `DroidBar.exe` passes the same flags through, e.g. `DroidBar.exe -Mock samples\mock.json`.
