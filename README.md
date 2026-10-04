@@ -16,7 +16,7 @@ A small Windows tray app that shows your [Factory](https://factory.ai) Droid usa
 
 ## How it works
 
-`DroidBar.exe` is a tiny C# host that runs `droid-bar.ps1` in-process (so Windows lists the app as "Droid Bar" instead of "Windows PowerShell"). The script polls the Factory API on a timer, keeps your API key encrypted with DPAPI, and does all the tray/popup/notification work.
+`DroidBar.exe` is a tiny C# host that runs `droid-bar.ps1` in-process (so Windows lists the app as "Droid Bar" instead of "Windows PowerShell"). The script imports `src\droid-bar-lib.psm1` — a GUI-free helper module (parsing, formatting, alert logic) that is unit-tested with Pester — polls the Factory API on a timer, keeps your API key encrypted with DPAPI, and does all the tray/popup/notification work.
 
 ```mermaid
 flowchart TB
@@ -49,7 +49,7 @@ All settings and state live in `%APPDATA%\droid-bar\` (see [Configuration](#conf
 
 ## Install
 
-1. Download `DroidBar-vX.Y.Z.zip` from [Releases](https://github.com/soaresfellipe/droidbar-windows/releases) and extract it anywhere (e.g. `C:\Tools\DroidBar`). Keep `DroidBar.exe` and `droid-bar.ps1` in the same folder.
+1. Download `DroidBar-vX.Y.Z.zip` from [Releases](https://github.com/soaresfellipe/droidbar-windows/releases) and extract it anywhere (e.g. `C:\Tools\DroidBar`). Keep `DroidBar.exe`, `droid-bar.ps1` and the `src\` folder (which contains `droid-bar-lib.psm1`) together — the zip already has this layout.
 2. Run `DroidBar.exe`.
 3. On first run it asks for a **Factory API key**. Create one at [app.factory.ai/settings/api-keys](https://app.factory.ai/settings/api-keys).
 4. Optional: right-click the icon and check **Start with Windows**.
