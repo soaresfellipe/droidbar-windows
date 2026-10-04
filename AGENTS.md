@@ -45,6 +45,7 @@ Use these flags to validate without the live GUI:
 | --- | --- |
 | `-Mock samples\mock.json` | Use a local JSON file instead of the API. |
 | `-Preview out.png` | Render the popup (and tray icon) to a PNG and exit. |
+| `-PreviewTab <id>` | With `-Preview`: which tab to render — `standard` (default), `core` or `computer`. |
 | `-Dump` | Print the raw API response and exit. |
 
 Protocol for changes that touch rendering or data logic:
@@ -60,7 +61,7 @@ Protocol for changes that touch rendering or data logic:
   `Import-Module Pester -RequiredVersion 5.7.1; Invoke-Pester -Path tests -Output Detailed -CI`
 - **Lint** (PSScriptAnalyzer, settings in `PSScriptAnalyzerSettings.psd1`):
   `Invoke-ScriptAnalyzer -Path droid-bar.ps1 -Settings PSScriptAnalyzerSettings.psd1`
-  (also lint `src/droid-bar-lib.psm1` once it exists — pass one path per call)
+  (also lint `src/droid-bar-lib.psm1` — pass one path per call)
   — zero Error-severity findings required; every rule excluded in the settings file
   carries a justification comment (DPAPI key path, intentional silent catches, `Draw-*`
   GUI helpers, `Write-Log`, fixed event-handler signatures, positional internal calls).
