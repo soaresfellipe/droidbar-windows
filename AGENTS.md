@@ -81,8 +81,8 @@ Individual gates: `-Check parse`, `lint`, `format`, `largefiles`, `secrets`,
   file. PSSA's formatter is the canonical PowerShell formatter; if it would
   change a file, the file is not committed in formatted shape.
 - **Hygiene** (`largefiles`, `secrets`): no tracked file over 1 MB, no code or
-  doc over 1500 lines, and no key-shaped material (`fk-` plus 8 or more
-  key characters) in the worktree **or in git history**.
+  doc over 1500 lines, and no key-shaped credential material (the key prefix plus
+  8 or more key characters) in the worktree **or in git history**.
 - **Tests** (`tests`): Pester pinned to 5.7.1, 98 cases in `tests/`.
 - **Coverage** (`coverage`): Pester code coverage on `src/droid-bar-lib.psm1`
   must stay at or above **85%** (currently 99.4%). The GUI script is excluded

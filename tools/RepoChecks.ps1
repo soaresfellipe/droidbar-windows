@@ -176,7 +176,7 @@ function Invoke-LargeFileCheck {
 }
 
 function Invoke-SecretsCheck {
-    # Key-shaped pattern, never the bare prefix: the two legitimate bare 'fk-'
+    # Key-shaped pattern, never the bare prefix: the two legitimate bare-prefix
     # occurrences are the UI prompt literal in droid-bar.ps1 and the negative
     # assertion in tests/Computers.Tests.ps1 (see AGENTS.md, "Mission
     # Boundaries"). A key-shaped match in the worktree *or* in history is a

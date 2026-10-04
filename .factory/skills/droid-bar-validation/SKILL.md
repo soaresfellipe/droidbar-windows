@@ -65,9 +65,9 @@ To inspect raw API/parse behavior, use `-Dump`.
   stay free of non-`apiBase` host strings (the real computers payload contains
   `relay.factory.ai` URLs that the mock deliberately omits).
 - The API key is never logged, committed or echoed. `droid-bar.ps1` and
-  `tests/Computers.Tests.ps1` contain the only two bare `fk-` strings in the
-  repo; the `secrets` gate fails on any key-shaped match in the worktree or in
-  git history.
+  `tests/Computers.Tests.ps1` contain the only two places in the repo where the key
+  prefix appears as a literal (a UI prompt and a negative test assertion); the
+  `secrets` gate fails on any key-shaped match in the worktree or in git history.
 
 ## Landing the change
 
