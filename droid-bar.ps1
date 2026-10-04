@@ -44,31 +44,12 @@ $KeysUrl    = 'https://app.factory.ai/settings/api-keys'
 $RunKey     = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 if (-not (Test-Path $DataDir)) { New-Item -ItemType Directory -Path $DataDir | Out-Null }
 
-function Write-Log([string]$msg) {
-    try {
-        if ((Test-Path $LogPath) -and (Get-Item $LogPath).Length -gt 512KB) { Remove-Item $LogPath }
-        Add-Content -Path $LogPath -Value ("{0:yyyy-MM-dd HH:mm:ss}  {1}" -f (Get-Date), $msg) -Encoding UTF8
-    } catch { }
-}
-
-function ConvertTo-Hashtable($obj) {
-    $h = @{}
-    if ($null -ne $obj) { foreach ($p in $obj.PSObject.Properties) { $h[$p.Name] = $p.Value } }
-    return $h
-}
-
-# Strict-mode-safe member access: returns $null when the property (or dictionary key)
-# does not exist instead of throwing. Required because Set-StrictMode turns references
-# to non-existent properties into terminating errors, and API/mock JSON is dynamic.
-function Get-MemberValue($obj, [string]$name) {
-    if ($null -eq $obj) { return $null }
-    if ($obj -is [System.Collections.IDictionary]) {
-        if ($obj.Contains($name)) { return $obj[$name] } else { return $null }
-    }
-    $p = $obj.PSObject.Properties[$name]
-    if ($null -ne $p) { return $p.Value }
-    return $null
-}
+# GUI-free helpers (parsing, formatting, alert logic, tray look) live in a sibling
+# module so they can be unit-tested off-Windows; it never loads WinForms/Drawing.
+# $PSScriptRoot resolves to the exe folder under DroidBar.exe too, so the release
+# zip layout (script + src\droid-bar-lib.psm1) works as-is.
+Import-Module (Join-Path (Join-Path $PSScriptRoot 'src') 'droid-bar-lib.psm1')
+Initialize-LibState -LogPath $LogPath -StatePath $StatePath
 
 function Get-Config {
     $cfg = @{
@@ -107,84 +88,11 @@ function Set-ApiKey([string]$key) {
     Save-Config
 }
 
-function Get-AlertState {
-    if (Test-Path $StatePath) {
-        try { return ConvertTo-Hashtable (Get-Content $StatePath -Raw | ConvertFrom-Json) } catch { }
-    }
-    return @{}
-}
-
-# ---------------------------------------------------------------- data helpers
-
-$Pools   = [ordered]@{ standard = 'Standard'; core = 'Droid Core' }
-$Windows = [ordered]@{ fiveHour = '5-hour usage'; weekly = 'Weekly usage'; monthly = 'Monthly usage' }
-$Short   = @{ fiveHour = '5h'; weekly = 'week'; monthly = 'month' }
-
-function ConvertTo-LocalTime($v) {
-    if ($null -eq $v -or "$v" -eq '') { return $null }
-    if ($v -is [datetime]) { return $v.ToLocalTime() }
-    if ($v -is [int] -or $v -is [long] -or $v -is [double] -or $v -is [decimal]) {
-        $n = [double]$v
-        if ($n -gt 1e12) { return [DateTimeOffset]::FromUnixTimeMilliseconds([long]$n).LocalDateTime }
-        return [DateTimeOffset]::FromUnixTimeSeconds([long]$n).LocalDateTime
-    }
-    try { return [DateTimeOffset]::Parse([string]$v, [Globalization.CultureInfo]::InvariantCulture).LocalDateTime } catch { return $null }
-}
-
-function Get-WinInfo([string]$pool, [string]$key) {
-    $info = @{ Pct = $null; End = $null; Active = $false }
-    # Dynamic JSON lookups go through Get-MemberValue so missing pool/window keys
-    # (e.g. limits.notAvailable) yield $null instead of a strict-mode property error.
-    $limits = Get-MemberValue $script:Data 'limits'
-    if ($null -eq $limits) { return $info }
-    $p = Get-MemberValue $limits $pool
-    if ($null -eq $p) { return $info }
-    $w = Get-MemberValue $p $key
-    if ($null -eq $w) { return $info }
-    $pct = 0.0
-    $used = Get-MemberValue $w 'usedPercent'
-    if ($null -ne $used) { $pct = [double]$used }
-    $end = ConvertTo-LocalTime (Get-MemberValue $w 'windowEnd')
-    $info.End = $end
-    if ($end) {
-        $info.Active = $end -ge (Get-Date)
-        if (-not $info.Active) { $pct = 0 }   # window already rolled over: usage is back to zero
-    }
-    $info.Pct = [math]::Max(0, $pct)
-    return $info
-}
-
-function Get-PoolMax([string]$pool) {
-    $max = $null
-    foreach ($k in $Windows.Keys) {
-        $i = Get-WinInfo $pool $k
-        if ($null -ne $i.Pct -and ($null -eq $max -or $i.Pct -gt $max)) { $max = $i.Pct }
-    }
-    return $max
-}
-
-function Format-Pct($pct) { if ($null -eq $pct) { return '—' }; return ('{0:0}%' -f [math]::Floor($pct)) }
-
-function Format-Remaining($end) {
-    if (-not $end) { return '—' }
-    $ts = $end - (Get-Date)
-    if ($ts.TotalSeconds -le 0) { return 'now' }
-    if ($ts.TotalHours -ge 48) { return ('{0} days' -f [math]::Floor($ts.TotalDays)) }
-    if ($ts.TotalHours -ge 24) { return ('1 day {0}h' -f $ts.Hours) }
-    $h = [math]::Floor($ts.TotalHours)
-    if ($h -gt 0) { return ('{0}h {1}min' -f $h, $ts.Minutes) }
-    if ($ts.Minutes -lt 1) { return '<1min' }
-    return ('{0}min' -f $ts.Minutes)
-}
-
 # ---------------------------------------------------------------- fetching
 
-$script:Cfg       = Get-Config
-$script:Data      = $null
-$script:LastError = $null
-$script:Updated   = $null
-$script:Fetch     = $null
-$script:Alerts    = Get-AlertState
+$script:Cfg = Get-Config
+Set-LibConfig -Config $script:Cfg
+$script:Fetch = $null
 
 function Get-LimitsUrl { return ($script:Cfg.apiBase.TrimEnd('/') + '/api/billing/limits') }
 
@@ -202,39 +110,17 @@ $FetchScript = {
     }
 }
 
-function Set-FetchResult($res) {
-    if (Get-MemberValue $res 'ok') {
-        try {
-            $script:Data = $res.body | ConvertFrom-Json
-            $script:LastError = $null
-            $script:Updated = Get-Date
-            $limits = Get-MemberValue $script:Data 'limits'
-            if (Get-MemberValue $limits 'notAvailable') { $script:LastError = 'Limits unavailable for this account' }
-        } catch {
-            $script:LastError = 'Unexpected API response'
-            Write-Log "json: $_ :: $(Get-MemberValue $res 'body')"
-        }
-    } elseif ((Get-MemberValue $res 'status') -eq 401 -or (Get-MemberValue $res 'status') -eq 403) {
-        $script:LastError = 'Invalid API key or missing permission'
-    } elseif (Get-MemberValue $res 'status') {
-        $script:LastError = "HTTP error $(Get-MemberValue $res 'status')"
-    } else {
-        $script:LastError = "Can't reach Factory"
-    }
-    if ($script:LastError) { Write-Log "$($script:LastError) $(Get-MemberValue $res 'error')" }
-}
-
 function Start-Refresh {
     if ($script:Fetch) { return }
     if ($Mock) {
         Set-FetchResult @{ ok = $true; body = (Get-Content $Mock -Raw -Encoding UTF8) }
-        Test-Alerts
+        Show-Alerts
         Update-Ui
         return
     }
     $key = Get-ApiKey
     if (-not $key) {
-        $script:LastError = 'Set your API key (right-click the icon)'
+        Set-FetchError 'Set your API key (right-click the icon)'
         Update-Ui
         return
     }
@@ -251,9 +137,9 @@ function Complete-Refresh {
     try {
         $out = $f.ps.EndInvoke($f.handle)
         Set-FetchResult $out[0]
-        if (-not $script:LastError) { Test-Alerts }
+        if (-not (Get-FetchError)) { Show-Alerts }
     } catch {
-        $script:LastError = 'Failed to query the API'
+        Set-FetchError 'Failed to query the API'
         Write-Log "fetch: $_"
     } finally { $f.ps.Dispose() }
     Update-Ui
@@ -261,42 +147,16 @@ function Complete-Refresh {
 
 # ---------------------------------------------------------------- alerts
 
-function Test-Alerts {
-    $thresholds = @($script:Cfg.thresholds | ForEach-Object { [double]$_ } | Sort-Object)
-    $msgs = New-Object System.Collections.Generic.List[string]
-    $worst = 0
-    foreach ($pool in @($script:Cfg.notifyPools)) {
-        if (-not $Pools.Contains($pool)) { continue }
-        foreach ($k in $Windows.Keys) {
-            $i = Get-WinInfo $pool $k
-            if ($null -eq $i.Pct) { continue }
-            $id = "$pool.$k"
-            $level = 0.0
-            if ($script:Alerts.ContainsKey($id)) { $level = [double]$script:Alerts[$id] }
-
-            # Usage dropped well below the last alert: the window has reset.
-            if ($level -gt 0 -and $i.Pct -lt ($level - 5)) {
-                if ($level -ge 100) { $msgs.Add(("{0} · {1}: limit available again ({2})" -f $Pools[$pool], $Windows[$k], (Format-Pct $i.Pct))) }
-                $level = 0
-            }
-            $crossed = $thresholds | Where-Object { $i.Pct -ge $_ } | Select-Object -Last 1
-            if ($crossed -and $crossed -gt $level) {
-                $what = if ($i.Pct -ge 100) { 'limit reached' } else { 'at ' + (Format-Pct $i.Pct) }
-                $msgs.Add(("{0} · {1}: {2}, resets in {3}" -f $Pools[$pool], $Windows[$k], $what, (Format-Remaining $i.End)))
-                $level = $crossed
-                if ($crossed -gt $worst) { $worst = $crossed }
-            }
-            $script:Alerts[$id] = $level
-        }
-    }
-    try { $script:Alerts | ConvertTo-Json | Set-Content -Path $StatePath -Encoding UTF8 } catch { }
-
-    if ($msgs.Count -gt 0 -and $script:Tray) {
+# Test-Alerts (module) computes the threshold crossings and updates state.json;
+# here we only turn its result into the tray balloon notification.
+function Show-Alerts {
+    $r = Test-Alerts
+    if ($r.Messages.Count -gt 0 -and $script:Tray) {
         $title = 'Droid: credit usage'
         $icon = [Windows.Forms.ToolTipIcon]::Info
-        if ($worst -ge 100) { $title = 'Droid: limit reached'; $icon = [Windows.Forms.ToolTipIcon]::Error }
-        elseif ($worst -gt 0) { $title = 'Droid: approaching limit'; $icon = [Windows.Forms.ToolTipIcon]::Warning }
-        $script:Tray.ShowBalloonTip(10000, $title, ($msgs -join "`n"), $icon)
+        if ($r.Worst -ge 100) { $title = 'Droid: limit reached'; $icon = [Windows.Forms.ToolTipIcon]::Error }
+        elseif ($r.Worst -gt 0) { $title = 'Droid: approaching limit'; $icon = [Windows.Forms.ToolTipIcon]::Warning }
+        $script:Tray.ShowBalloonTip(10000, $title, ($r.Messages -join "`n"), $icon)
     }
 }
 
@@ -320,6 +180,14 @@ $F = @{
     Small = New-Object Drawing.Font('Segoe UI', 8.5)
 }
 $TF = [Windows.Forms.TextFormatFlags]
+# Get-TrayLook (module) returns palette names; map them to the popup's colors.
+$TrayColors = @{
+    gray   = [Drawing.Color]::FromArgb(60, 60, 60)
+    dark   = [Drawing.Color]::FromArgb(38, 38, 38)
+    orange = $C.Orange
+    red    = $C.Red
+    white  = [Drawing.Color]::White
+}
 $script:Tab   = 'standard'
 $script:Hit   = @{}
 $script:Hover = $null
@@ -406,20 +274,23 @@ function Draw-Popup($g, [int]$W, [int]$H) {
     }
 
     # status
-    $status = if (-not $script:Data) { '' }
+    $data = Get-UsageData
+    $status = if (-not $data) { '' }
               elseif ($exhausted) { "$($Pools[$script:Tab]) limit reached." }
               else { "You are using $($Pools[$script:Tab]) Usage." }
-    if ($script:Data -and ((Get-MemberValue $script:Data 'extraUsageBalanceCents') -gt 0)) {
-        $status += '  Extra usage: ' + ('${0:0.00}' -f ($script:Data.extraUsageBalanceCents / 100))
+    if ($data -and ((Get-MemberValue $data 'extraUsageBalanceCents') -gt 0)) {
+        $status += '  Extra usage: ' + ('${0:0.00}' -f ($data.extraUsageBalanceCents / 100))
     }
     Draw-Text $g $status $F.Small $pad ($y - [int](6 * $s)) $C.Muted
 
     # footer: updated / error + links
     $fy = $H - $pad - [int](12 * $s)
     $g.DrawLine($pen, $pad, $fy - [int](10 * $s), $W - $pad, $fy - [int](10 * $s))
+    $err = Get-FetchError
+    $upd = Get-LastUpdated
     if ($script:Fetch) { $left = 'Refreshing…'; $lc = $C.Muted }
-    elseif ($script:LastError) { $left = $script:LastError; $lc = $C.Red }
-    elseif ($script:Updated) { $left = 'Updated ' + $script:Updated.ToString('HH:mm'); $lc = $C.Muted }
+    elseif ($err) { $left = $err; $lc = $C.Red }
+    elseif ($upd) { $left = 'Updated ' + $upd.ToString('HH:mm'); $lc = $C.Muted }
     else { $left = ''; $lc = $C.Muted }
     Draw-Text $g $left $F.Small $pad $fy $lc
 
@@ -455,18 +326,6 @@ function New-TrayBitmap([string]$text, $bg, $fg, [int]$sz) {
     return $bmp
 }
 
-function Get-TrayLook {
-    $pool = $script:Cfg.trayPool
-    $max = Get-PoolMax $pool
-    if (-not $script:Data -or $null -eq $max) {
-        $t = if ($script:LastError) { '!' } else { '…' }
-        return @{ text = $t; bg = [Drawing.Color]::FromArgb(60, 60, 60); fg = [Drawing.Color]::White }
-    }
-    $bg = [Drawing.Color]::FromArgb(38, 38, 38)
-    if ($max -ge 90) { $bg = $C.Red } elseif ($max -ge 75) { $bg = $C.Orange }
-    return @{ text = ('{0:0}' -f [math]::Min(100, [math]::Floor($max))); bg = $bg; fg = [Drawing.Color]::White }
-}
-
 # ---------------------------------------------------------------- preview / dump modes
 
 if ($Dump) {
@@ -479,7 +338,7 @@ if ($Dump) {
 
 if ($Preview) {
     if ($Mock) { Set-FetchResult @{ ok = $true; body = (Get-Content $Mock -Raw -Encoding UTF8) } }
-    $script:Updated = Get-Date
+    Set-LastUpdated (Get-Date)
     $script:S = 1.0
     $sz = Get-PopupSize
     $bmp = New-Object Drawing.Bitmap($sz.Width, $sz.Height)
@@ -488,7 +347,7 @@ if ($Preview) {
     $g.Dispose()
     $bmp.Save($Preview, [Drawing.Imaging.ImageFormat]::Png)
     $look = Get-TrayLook
-    (New-TrayBitmap $look.text $look.bg $look.fg 64).Save(($Preview -replace '\.png$', '-icon.png'), [Drawing.Imaging.ImageFormat]::Png)
+    (New-TrayBitmap $look.text $TrayColors[$look.bg] $TrayColors[$look.fg] 64).Save(($Preview -replace '\.png$', '-icon.png'), [Drawing.Imaging.ImageFormat]::Png)
     "ok: $Preview"
     exit 0
 }
@@ -555,7 +414,8 @@ function Show-Popup {
     $script:Popup.Location = New-Object Drawing.Point([int]$x, [int]$y)
     $script:Popup.Show()
     $script:Popup.Activate()
-    if (-not $script:Updated -or ((Get-Date) - $script:Updated).TotalSeconds -gt 60) { Start-Refresh }
+    $upd = Get-LastUpdated
+    if (-not $upd -or ((Get-Date) - $upd).TotalSeconds -gt 60) { Start-Refresh }
 }
 
 # --- API key dialog
@@ -645,19 +505,21 @@ function Update-Ui {
     try {
         $look = Get-TrayLook
         $sz = [math]::Max(16, [Windows.Forms.SystemInformation]::SmallIconSize.Width)
-        $bmp = New-TrayBitmap $look.text $look.bg $look.fg $sz
+        $bmp = New-TrayBitmap $look.text $TrayColors[$look.bg] $TrayColors[$look.fg] $sz
         $h = $bmp.GetHicon()
         $script:Tray.Icon = [Drawing.Icon]::FromHandle($h)
         $bmp.Dispose()
         if ($script:PrevIcon) { [void][DBNative]::DestroyIcon($script:PrevIcon) }
         $script:PrevIcon = $h
 
-        if ($script:Data) {
+        $data = Get-UsageData
+        $err = Get-FetchError
+        if ($data) {
             $parts = foreach ($k in $Windows.Keys) { '{0} {1}' -f $Short[$k], (Format-Pct (Get-WinInfo 'standard' $k).Pct) }
             $tip = 'Droid · ' + ($parts -join ' · ')
             $core = Get-PoolMax 'core'
             if ($null -ne $core) { $tip += "`nCore up to " + (Format-Pct $core) }
-        } elseif ($script:LastError) { $tip = 'Droid · ' + $script:LastError }
+        } elseif ($err) { $tip = 'Droid · ' + $err }
         else { $tip = 'Droid · loading…' }
         if ($tip.Length -gt 63) { $tip = $tip.Substring(0, 63) }
         $script:Tray.Text = $tip
