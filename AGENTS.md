@@ -141,5 +141,3 @@ gh api repos/soaresfellipe/droidbar-windows/rulesets/24447470
    creates a GitHub Release with auto-generated notes and the zip attached.
 4. Verify at [Releases](https://github.com/soaresfellipe/droidbar-windows/releases) that the
    zip asset contains the expected files.
-
-<!-- merge gating probe -->
