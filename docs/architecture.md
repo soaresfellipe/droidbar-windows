@@ -1,8 +1,8 @@
 # Architecture
 
-This is the target architecture of Droid Bar; components land incrementally as
-milestones ship (the GUI-free helper module and the Droid Computers fetch are the
-newest additions).
+This is the architecture of Droid Bar today. The GUI-free helper module
+(`src/droid-bar-lib.psm1`) ships as part of the app and is covered by the Pester
+suite; the Droid Computers fetch and tab land with an upcoming milestone.
 
 ```mermaid
 flowchart TB
@@ -38,10 +38,12 @@ flowchart TB
   in-process; `$PSScriptRoot` still resolves to the exe folder.
 - **`droid-bar.ps1`** owns everything GUI and lifecycle: WinForms/GDI drawing, P/Invoke,
   the tray icon and popup, polling timer, threshold notifications, and the DPAPI key
-  handling. Dev flags (`-Mock`, `-Preview`, `-Dump`) short-circuit the GUI for validation.
+  handling. It imports `src/droid-bar-lib.psm1` from `$PSScriptRoot\src` at startup and
+  reads/writes the shared data-layer state through the module's accessors. Dev flags
+  (`-Mock`, `-Preview`, `-Dump`) short-circuit the GUI for validation.
 - **`src/droid-bar-lib.psm1`** holds the GUI-free, testable helpers (parsing, formatting,
-  alert computation). It imports cleanly on pwsh/Linux so the Pester suite can run anywhere;
-  the release zip ships it alongside the script.
+  alert computation, tray look). It imports cleanly on pwsh/Linux so the Pester suite can
+  run anywhere; the release zip ships it alongside the script.
 - **State** lives in `%APPDATA%\droid-bar\`: `config.json` (settings, DPAPI-protected key),
   `state.json` (which alert thresholds already fired per window), and `droid-bar.log`.
 - **The API key** is only ever sent as a Bearer token to `api.factory.ai`. It is never

@@ -51,5 +51,10 @@
         # called positionally on purpose to keep the single-file GUI script compact;
         # they are not public cmdlets and their signatures are stable.
         'PSAvoidUsingPositionalParameters'
+
+        # The lib module's exported helpers are internal building blocks of a tray
+        # app (documented inline where intent is non-obvious, per AGENTS.md);
+        # full comment-based help blocks on each of them would be noise.
+        'PSProvideCommentHelp'
     )
 }
