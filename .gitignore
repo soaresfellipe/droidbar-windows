@@ -5,3 +5,13 @@ src/droid-bar.ico
 
 # preview renders other than the README screenshot
 docs/*-icon.png
+
+# editors / OS cruft
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.user
+
+# test runner output
+testResults.xml
