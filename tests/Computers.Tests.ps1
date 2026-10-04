@@ -244,7 +244,10 @@ Describe 'Test-Alerts never consumes computer data' {
         $r.Messages[0] | Should -BeLike '*Standard*5-hour usage*'
         $r.Messages[0] | Should -Not -BeLike '*computer*'
         $state = ConvertTo-Hashtable (Get-Content (Join-Path $TestDrive 'state.json') -Raw | ConvertFrom-Json)
-        ($state.Keys | Where-Object { $_ -like 'computer*' }).Count | Should -Be 0
+        # @() so the assertion holds under Set-StrictMode: Where-Object returns
+        # $null (not an empty collection) when nothing matches, and .Count on
+        # $null is a terminating error there.
+        @($state.Keys | Where-Object { $_ -like 'computer*' }).Count | Should -Be 0
         # The computers state itself is untouched by the alert pass.
         @(Get-Computers).Count | Should -Be 3
     }

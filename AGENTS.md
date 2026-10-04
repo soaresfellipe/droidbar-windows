@@ -57,17 +57,50 @@ Protocol for changes that touch rendering or data logic:
 
 ## Tests and lint
 
-- **Pester** (suite in `tests/`, pinned 5.7.1):
-  `Import-Module Pester -RequiredVersion 5.7.1; Invoke-Pester -Path tests -Output Detailed -CI`
-- **Lint** (PSScriptAnalyzer, settings in `PSScriptAnalyzerSettings.psd1`):
-  `Invoke-ScriptAnalyzer -Path droid-bar.ps1 -Settings PSScriptAnalyzerSettings.psd1`
-  (also lint `src/droid-bar-lib.psm1` — pass one path per call)
-  — zero Error-severity findings required; every rule excluded in the settings file
-  carries a justification comment (DPAPI key path, intentional silent catches, `Draw-*`
-  GUI helpers, `Write-Log`, fixed event-handler signatures, positional internal calls).
-- **Syntax gate**: `[System.Management.Automation.Language.Parser]::ParseFile` must report
-  zero errors for every `.ps1`/`.psm1` file (CI enforces this on PowerShell 5.1).
-- All three gates run in CI (`.github/workflows/ci.yml`) on every PR and push to `main`.
+Every gate lives in **`tools/RepoChecks.ps1`** and is invoked from both CI and the
+local pre-commit hook, so the two can never drift. Run them all with:
+
+```powershell
+pwsh -File tools\RepoChecks.ps1 -Check all
+```
+
+Individual gates: `-Check parse`, `lint`, `format`, `largefiles`, `secrets`,
+`tests`, `coverage` (each exits non-zero on failure).
+
+- **Parse** (`parse`): `[System.Management.Automation.Language.Parser]::ParseFile`
+  must report zero errors for `droid-bar.ps1`, `src/droid-bar-lib.psm1`,
+  `build.ps1` and `tools/RepoChecks.ps1`. CI enforces this on PowerShell 5.1,
+  which is what guards against PS 7-only syntax.
+- **Lint** (`lint`): PSScriptAnalyzer 1.25.0 with `PSScriptAnalyzerSettings.psd1`.
+  Zero Error-severity findings required, currently zero findings at any severity.
+  Every rule excluded in the settings file carries a justification comment
+  (DPAPI key path, intentional silent catches, `Draw-*` GUI helpers, `Write-Log`,
+  fixed event-handler signatures, positional internal calls). Analyze **one path
+  per call** — `-Path` takes a single string.
+- **Format** (`format`): `Invoke-Formatter` must be a no-op on every analyzed
+  file. PSSA's formatter is the canonical PowerShell formatter; if it would
+  change a file, the file is not committed in formatted shape.
+- **Hygiene** (`largefiles`, `secrets`): no tracked file over 1 MB, no code or
+  doc over 1500 lines, and no key-shaped credential material (the key prefix plus
+  8 or more key characters) in the worktree **or in git history**.
+- **Tests** (`tests`): Pester pinned to 5.7.1, 98 cases in `tests/`.
+- **Coverage** (`coverage`): Pester code coverage on `src/droid-bar-lib.psm1`
+  must stay at or above **85%** (currently 99.4%). The GUI script is excluded
+  on purpose: its WinForms paths are only reachable on Windows.
+
+### Local pre-commit hook
+
+Hooks cannot be committed into `.git/hooks`, so install them once per clone:
+
+```powershell
+pwsh -File tools\Install-Hooks.ps1
+```
+
+This sets `core.hooksPath = .githooks`, after which `.githooks/pre-commit` runs
+the `parse`, `lint`, `largefiles` and `secrets` gates before each commit. The
+`format` and `coverage` gates are CI-only (they need the PSScriptAnalyzer engine
+and a full Pester run). All gates also run in CI
+(`.github/workflows/ci.yml`) on every PR and push to `main`.
 
 ## Config / state / log paths (Windows)
 

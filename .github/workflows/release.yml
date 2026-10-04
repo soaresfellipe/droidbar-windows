@@ -23,7 +23,9 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
+      # Third-party action pinned to a commit SHA (supply-chain hardening);
+      # the trailing comment records the human-readable version.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # Compiles DroidBar.exe with the C# compiler that ships with Windows
       # (.NET Framework 4). Windows-only, same call as the CI build step.
