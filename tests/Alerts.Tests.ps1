@@ -111,6 +111,9 @@ Describe 'Test-Alerts' {
         $r.Worst | Should -Be 0
         $state = Get-SavedState
         $state.Keys | Should -Not -Contain 'computer.fiveHour'
-        ($state.Keys | Where-Object { $_ -like 'computer*' }).Count | Should -Be 0
+        # @() so the assertion holds under Set-StrictMode: Where-Object returns
+        # $null (not an empty collection) when nothing matches, and .Count on
+        # $null is a terminating error there.
+        @($state.Keys | Where-Object { $_ -like 'computer*' }).Count | Should -Be 0
     }
 }

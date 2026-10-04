@@ -3,6 +3,12 @@ DroidBar.exe
 src/droid-bar.ico
 *.zip
 
+# generic build/IDE output directories (the app has none, but a contributor's
+# tooling might create them)
+build/
+target/
+node_modules/
+
 # preview renders other than the README screenshot
 docs/*-icon.png
 
@@ -15,3 +21,9 @@ Thumbs.db
 
 # test runner output
 testResults.xml
+coverage.xml
+
+# local secrets / env overrides. .env.example IS tracked; .env never is.
+.env
+.env.*
+!.env.example

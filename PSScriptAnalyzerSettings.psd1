@@ -56,5 +56,10 @@
         # app (documented inline where intent is non-obvious, per AGENTS.md);
         # full comment-based help blocks on each of them would be noise.
         'PSProvideCommentHelp'
+
+        # The gate scripts in tools/ are CI jobs, not a library: their contract is
+        # "print the diagnostic and exit non-zero", which is exactly Write-Host.
+        # They run in a GitHub Actions step where the step log IS the report.
+        'PSAvoidUsingWriteHost'
     )
 }

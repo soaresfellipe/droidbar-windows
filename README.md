@@ -20,8 +20,10 @@ The current release is **v1.1.0** (see [Releases](https://github.com/soaresfelli
   to PNG for CI artifact review.
 - **The release zip now ships `src/droid-bar-lib.psm1`**, the GUI-free helper module the script
   imports at runtime, so the zip layout matches what the code expects.
-- Repo hygiene from the Agent-Readiness work: `AGENTS.md`, Pester suite, PSScriptAnalyzer settings,
-  CI workflow, contribution templates and CODEOWNERS.
+- **Repo hygiene from the Agent-Readiness work:** `AGENTS.md`, a Pester suite with an enforced
+  coverage floor, PSScriptAnalyzer lint + format gates, a `largefiles`/`secrets` hygiene gate, a
+  local pre-commit hook, CI, release automation, contribution templates, CODEOWNERS, and
+  `.factory/skills/` for agent workflows.
 
 ## Features
 
@@ -98,7 +100,9 @@ Settings live in `%APPDATA%\droid-bar\config.json` (right-click → **Open setti
 | `apiBase` | `"https://api.factory.ai"` | API base URL. |
 | `apiKeyProtected` | *(empty)* | The API key, encrypted with DPAPI. Set through **Set API key** in the right-click menu rather than by hand. |
 
-The `FACTORY_API_KEY` environment variable, if set, takes precedence over the stored key.
+The `FACTORY_API_KEY` environment variable, if set, takes precedence over the stored key. It is the
+only environment variable the app reads; see [`.env.example`](.env.example) for the full reference
+(and note that the app does not load `.env` itself — set the variable in your shell).
 
 ## Privacy
 
@@ -132,6 +136,53 @@ powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1
 ```
 
 This generates `src\droid-bar.ico` and compiles `DroidBar.exe` with the C# compiler that ships with .NET Framework 4 (`csc.exe`). No SDK needed.
+
+## Troubleshooting
+
+Read `%APPDATA%\droid-bar\droid-bar.log` first — it records every fetch outcome and error, and never
+contains the API key. Right-click the tray icon → **Open settings folder** to reach it plus
+`config.json` and `state.json`.
+
+| Symptom | Likely cause | What to do |
+| --- | --- | --- |
+| "No API key" prompt on every start | `apiKeyProtected` is empty, or was written by a different Windows user (DPAPI is per-user). | Right-click → **Set API key** and re-enter it. |
+| Popup shows an error instead of usage | The fetch failed; the log line carries the HTTP status. | `401` = key missing/wrong/deleted. `400` = key malformed. `429` = rate limited; wait or raise `pollMinutes`. |
+| A threshold reached but no notification fired | That threshold already fired for that window. | Expected behavior — `state.json` records it and it re-arms when usage drops back below. |
+| Tray number is not the pool you expect | `trayPool` selects which pool the number reflects (`standard` by default). | Edit `config.json` and restart. |
+| Computer tab empty or "unavailable" | The `/api/v0/computers` call failed or returned an unrecognized shape. | Check the log for a `computers` line. The Standard and Droid Core tabs keep working. |
+
+For a deeper triage path (mapping symptoms to HTTP status codes and state files), see the
+`droid-bar-triage` skill in `.factory/skills/`.
+
+## Contributing
+
+All changes land on `main` through a pull request — `main` is protected by a repository ruleset
+that requires the `ci` check to pass, and no bypass actor exists (not even for admins). See
+[AGENTS.md](AGENTS.md) for the full agent/contributor workflow, and the
+`.factory/skills/` skills for how to validate a change.
+
+Install the local pre-commit gate once per clone (it runs the fast subset of CI before each
+commit):
+
+```powershell
+pwsh -File tools\Install-Hooks.ps1
+```
+
+Quality gates, all defined in `tools/RepoChecks.ps1`:
+
+```powershell
+pwsh -File tools\RepoChecks.ps1 -Check all   # parse, lint, format, largefiles, secrets, tests, coverage
+```
+
+| Gate | What it enforces |
+| --- | --- |
+| `parse` | Zero PowerShell syntax errors, checked on Windows PowerShell 5.1 (the app's runtime). |
+| `lint` | PSScriptAnalyzer with `PSScriptAnalyzerSettings.psd1`; every suppression carries a justification. |
+| `format` | `Invoke-Formatter` is a no-op on every analyzed file. |
+| `largefiles` | No tracked file over 1 MB; no code or doc over 1500 lines. |
+| `secrets` | No key-shaped credential material in the worktree or in git history. |
+| `tests` | The Pester suite (pinned to 5.7.1) passes. |
+| `coverage` | Code coverage of `src/droid-bar-lib.psm1` stays at or above 85%. |
 
 ## License
 
