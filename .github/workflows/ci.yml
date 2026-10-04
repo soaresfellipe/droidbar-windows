@@ -77,6 +77,12 @@ jobs:
         shell: cmd
         run: powershell -NoProfile -ExecutionPolicy Bypass -File droid-bar.ps1 -Mock samples\mock.json -Preview out.png
 
+      # -PreviewTab renders one tab's content (see AGENTS.md protocol): the
+      # Computer tab proves the third-tab layout and the content-aware height.
+      - name: Smoke preview (Computer tab)
+        shell: cmd
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File droid-bar.ps1 -Mock samples\mock.json -Preview out-computer.png -PreviewTab computer
+
       - name: Upload preview artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -84,4 +90,5 @@ jobs:
           path: |
             out.png
             out-icon.png
+            out-computer.png
           if-no-files-found: error

@@ -6,11 +6,13 @@
     DroidBar.exe                      (or: powershell -NoProfile -ExecutionPolicy Bypass -File droid-bar.ps1)
     ... -Mock samples\mock.json       use a local JSON file instead of the API
     ... -Preview popup.png            render the popup to a PNG and exit
+    ... -PreviewTab <id>              with -Preview: which tab to render (standard | core | computer)
     ... -Dump                         print the raw API response and exit
 #>
 param(
     [string]$Mock,
     [string]$Preview,
+    [string]$PreviewTab,
     [switch]$Dump
 )
 
@@ -201,6 +203,16 @@ $TrayColors = @{
     red    = $C.Red
     white  = [Drawing.Color]::White
 }
+# Computer status chips (palette names from Get-ComputerStatusColor, same
+# convention as $TrayColors): active accent green, paused muted, provisioning
+# orange, failed red, unknown gray.
+$ChipColors = @{
+    green  = @{ bg = [Drawing.Color]::FromArgb(34, 197, 94); fg = [Drawing.Color]::FromArgb(10, 10, 10) }
+    muted  = @{ bg = $C.Muted;                               fg = [Drawing.Color]::White }
+    orange = @{ bg = $C.Orange;                              fg = [Drawing.Color]::FromArgb(10, 10, 10) }
+    red    = @{ bg = $C.Red;                                 fg = [Drawing.Color]::White }
+    gray   = @{ bg = [Drawing.Color]::FromArgb(90, 90, 90);  fg = [Drawing.Color]::White }
+}
 $script:Tab   = 'standard'
 $script:Hit   = @{}
 $script:Hover = $null
@@ -217,7 +229,22 @@ function New-RoundPath([Drawing.RectangleF]$r, [single]$rad) {
     return $p
 }
 
-function Get-PopupSize { return New-Object Drawing.Size([int](420 * $script:S), [int](292 * $script:S)) }
+# Content-aware popup size: the Standard/Core view needs a fixed height for the
+# three usage bars; the Computer view grows with the number of machines and
+# keeps a compact floor when the list is empty or unavailable.
+function Get-PopupSize {
+    $s = $script:S
+    if ($script:Tab -eq 'computer') {
+        $computers = Get-Computers
+        $n = 0
+        if ($computers) { $n = @($computers).Count }
+        if ($n -eq 0) { return New-Object Drawing.Size([int](420 * $s), [int](180 * $s)) }
+        # header (72) + summary row + one 28px row per machine + footer (58)
+        $h = [int](150 * $s) + ([int](28 * $s) * $n)
+        return New-Object Drawing.Size([int](420 * $s), $h)
+    }
+    return New-Object Drawing.Size([int](420 * $s), [int](292 * $s))
+}
 
 function Draw-Text($g, [string]$text, $font, [int]$x, [int]$y, $color) {
     [Windows.Forms.TextRenderer]::DrawText($g, $text, $font, (New-Object Drawing.Point($x, $y)), $color, $TF::NoPadding)
@@ -237,66 +264,119 @@ function Draw-Popup($g, [int]$W, [int]$H) {
     $pen = New-Object Drawing.Pen($C.Border)
     $g.DrawRectangle($pen, 0, 0, $W - 1, $H - 1)
 
-    # header + Standard / Droid Core switch
+    # header + tab switch, driven by the tab registry (Get-TabRegistry in the
+    # lib module: id -> label + width). Computer is a tab here but never a
+    # $Pools key, so it can never opt into notifications.
     Draw-Text $g 'Usage Limits' $F.Title $pad ([int]($pad + 3 * $s)) $C.Text
     $segH = [int](30 * $s); $segY = $pad - [int](4 * $s)
-    $tabs = @(@{ id = 'standard'; w = [int](86 * $s) }, @{ id = 'core'; w = [int](100 * $s) })
-    $segW = $tabs[0].w + $tabs[1].w + [int](8 * $s)
+    $registry = Get-TabRegistry
+    $segW = [int](8 * $s)
+    foreach ($id in @($registry.Keys)) { $segW += [int]($registry[$id].width * $s) }
     $x = $W - $pad - $segW
     $outer = New-Object Drawing.RectangleF($x, $segY, $segW, $segH)
     $path = New-RoundPath $outer (5 * $s)
     $g.FillPath((New-Object Drawing.SolidBrush($C.SegBg)), $path)
     $g.DrawPath($pen, $path)
     $tx = $x + [int](4 * $s)
-    foreach ($t in $tabs) {
-        $r = New-Object Drawing.Rectangle($tx, ($segY + [int](4 * $s)), $t.w, ($segH - [int](8 * $s)))
+    foreach ($id in @($registry.Keys)) {
+        $t = $registry[$id]
+        $r = New-Object Drawing.Rectangle($tx, ($segY + [int](4 * $s)), [int]($t.width * $s), ($segH - [int](8 * $s)))
         $fg = $C.Muted
-        if ($script:Tab -eq $t.id) {
+        if ($script:Tab -eq $id) {
             $g.FillPath([Drawing.Brushes]::White, (New-RoundPath ([Drawing.RectangleF]$r) (4 * $s)))
             $fg = [Drawing.Color]::Black
-        } elseif ($script:Hover -eq "tab:$($t.id)") { $fg = $C.Text }
-        [Windows.Forms.TextRenderer]::DrawText($g, $Pools[$t.id], $F.Body, $r, $fg, ($TF::HorizontalCenter -bor $TF::VerticalCenter -bor $TF::SingleLine))
-        $script:Hit["tab:$($t.id)"] = $r
-        $tx += $t.w
+        } elseif ($script:Hover -eq "tab:$id") { $fg = $C.Text }
+        [Windows.Forms.TextRenderer]::DrawText($g, $t.label, $F.Body, $r, $fg, ($TF::HorizontalCenter -bor $TF::VerticalCenter -bor $TF::SingleLine))
+        $script:Hit["tab:$id"] = $r
+        $tx += [int]($t.width * $s)
     }
 
-    # bars
-    $y = $pad + [int](50 * $s)
-    $barW = $W - 2 * $pad
-    $exhausted = $false
-    foreach ($k in $Windows.Keys) {
-        $i = Get-WinInfo $script:Tab $k
-        $label = $Windows[$k]
-        Draw-Text $g $label $F.Label $pad $y $C.Text
-        $lw = (Measure-Text $label $F.Label).Width
-        Draw-Text $g (Format-Pct $i.Pct) $F.Small ($pad + $lw + [int](8 * $s)) ($y + [int](1 * $s)) $C.Muted
+    # body: tab-specific content
+    if ($script:Tab -eq 'computer') {
+        Draw-ComputerView $g $W $H
+    } else {
+        # bars
+        $y = $pad + [int](50 * $s)
+        $barW = $W - 2 * $pad
+        $exhausted = $false
+        foreach ($k in $Windows.Keys) {
+            $i = Get-WinInfo $script:Tab $k
+            $label = $Windows[$k]
+            Draw-Text $g $label $F.Label $pad $y $C.Text
+            $lw = (Measure-Text $label $F.Label).Width
+            Draw-Text $g (Format-Pct $i.Pct) $F.Small ($pad + $lw + [int](8 * $s)) ($y + [int](1 * $s)) $C.Muted
 
-        $reset = [char]0x21BB + ' ' + (Format-Remaining $i.End)
-        $rw = (Measure-Text $reset $F.Small).Width
-        Draw-Text $g $reset $F.Small ($W - $pad - $rw) ($y + [int](1 * $s)) $C.Muted
+            $reset = [char]0x21BB + ' ' + (Format-Remaining $i.End)
+            $rw = (Measure-Text $reset $F.Small).Width
+            Draw-Text $g $reset $F.Small ($W - $pad - $rw) ($y + [int](1 * $s)) $C.Muted
 
-        $by = $y + [int](25 * $s); $bh = [int](8 * $s)
-        $g.FillRectangle((New-Object Drawing.SolidBrush($C.Track)), $pad, $by, $barW, $bh)
-        if ($i.Pct -gt 0) {
-            $fill = if ($i.Pct -ge 90) { $C.Red } else { $C.Orange }
-            $fw = [math]::Max([int](2 * $s), [int]($barW * [math]::Min(100, $i.Pct) / 100))
-            $g.FillRectangle((New-Object Drawing.SolidBrush($fill)), $pad, $by, $fw, $bh)
+            $by = $y + [int](25 * $s); $bh = [int](8 * $s)
+            $g.FillRectangle((New-Object Drawing.SolidBrush($C.Track)), $pad, $by, $barW, $bh)
+            if ($i.Pct -gt 0) {
+                $fill = if ($i.Pct -ge 90) { $C.Red } else { $C.Orange }
+                $fw = [math]::Max([int](2 * $s), [int]($barW * [math]::Min(100, $i.Pct) / 100))
+                $g.FillRectangle((New-Object Drawing.SolidBrush($fill)), $pad, $by, $fw, $bh)
+            }
+            if ($i.Pct -ge 100) { $exhausted = $true }
+            $y += [int](52 * $s)
         }
-        if ($i.Pct -ge 100) { $exhausted = $true }
-        $y += [int](52 * $s)
-    }
 
-    # status
-    $data = Get-UsageData
-    $status = if (-not $data) { '' }
-              elseif ($exhausted) { "$($Pools[$script:Tab]) limit reached." }
-              else { "You are using $($Pools[$script:Tab]) Usage." }
-    if ($data -and ((Get-MemberValue $data 'extraUsageBalanceCents') -gt 0)) {
-        $status += '  Extra usage: ' + ('${0:0.00}' -f ($data.extraUsageBalanceCents / 100))
+        # status
+        $data = Get-UsageData
+        $status = if (-not $data) { '' }
+                  elseif ($exhausted) { "$($Pools[$script:Tab]) limit reached." }
+                  else { "You are using $($Pools[$script:Tab]) Usage." }
+        if ($data -and ((Get-MemberValue $data 'extraUsageBalanceCents') -gt 0)) {
+            $status += '  Extra usage: ' + ('${0:0.00}' -f ($data.extraUsageBalanceCents / 100))
+        }
+        Draw-Text $g $status $F.Small $pad ($y - [int](6 * $s)) $C.Muted
     }
-    Draw-Text $g $status $F.Small $pad ($y - [int](6 * $s)) $C.Muted
 
     # footer: updated / error + links
+    Draw-Footer $g $W $H
+    $pen.Dispose()
+}
+
+# Computer tab body (display-only): summary line, then one row per machine —
+# name + provider type on the left, a status chip on the right. Unavailable or
+# empty data degrades to a single message line.
+function Draw-ComputerView($g, [int]$W, [int]$H) {
+    $s = $script:S
+    $pad = [int](22 * $s)
+    $computers = Get-Computers
+    $y = $pad + [int](50 * $s)
+    $err = Get-ComputersError
+    if ($err) { Draw-Text $g ('Computers unavailable · ' + $err) $F.Small $pad $y $C.Red; return }
+    if (-not $computers) { Draw-Text $g 'No computers' $F.Small $pad $y $C.Muted; return }
+
+    Draw-Text $g (Format-ComputerSummary $computers) $F.Label $pad $y $C.Text
+    $y += [int](30 * $s)
+    foreach ($c in @($computers)) {
+        $name = $c['name']
+        $prov = $c['providerType']
+        Draw-Text $g $name $F.Body $pad $y $C.Text
+        $nw = (Measure-Text $name $F.Body).Width
+        Draw-Text $g $prov $F.Small ($pad + $nw + [int](8 * $s)) ($y + [int](2 * $s)) $C.Muted
+
+        # status chip: pill filled with the palette color, label right-aligned
+        $status = $c['status']
+        $pal = Get-ComputerStatusColor $status
+        $cc = $ChipColors[$pal]
+        $cw = (Measure-Text $status $F.Small).Width + [int](14 * $s)
+        $ch = [int](16 * $s)
+        $r = New-Object Drawing.RectangleF(($W - $pad - $cw), ($y - [int](1 * $s)), $cw, $ch)
+        $pill = New-RoundPath $r ($ch / 2)
+        $g.FillPath((New-Object Drawing.SolidBrush($cc.bg)), $pill)
+        $pill.Dispose()
+        [Windows.Forms.TextRenderer]::DrawText($g, $status, $F.Small, (New-Object Drawing.Point(($W - $pad - $cw + [int](7 * $s)), ($y + [int](1 * $s)))), $cc.fg, $TF::NoPadding)
+        $y += [int](28 * $s)
+    }
+}
+
+function Draw-Footer($g, [int]$W, [int]$H) {
+    $s = $script:S
+    $pad = [int](22 * $s)
+    $pen = New-Object Drawing.Pen($C.Border)
     $fy = $H - $pad - [int](12 * $s)
     $g.DrawLine($pen, $pad, $fy - [int](10 * $s), $W - $pad, $fy - [int](10 * $s))
     $err = Get-FetchError
@@ -350,6 +430,15 @@ if ($Dump) {
 }
 
 if ($Preview) {
+    # -PreviewTab <id> picks the tab the preview renders (default standard).
+    if ($PreviewTab) {
+        $registry = Get-TabRegistry
+        if (-not $registry.Contains($PreviewTab)) {
+            [Console]::Error.WriteLine(("Unknown -PreviewTab '{0}' (valid: {1})" -f $PreviewTab, (@($registry.Keys) -join ', ')))
+            exit 1
+        }
+        $script:Tab = $PreviewTab
+    }
     if ($Mock) {
         $body = (Get-Content $Mock -Raw -Encoding UTF8)
         Set-FetchResult @{ ok = $true; body = $body }
@@ -411,10 +500,18 @@ $Popup.Add_MouseMove({ param($form, $e)
 $Popup.Add_MouseClick({ param($form, $e)
     try {
         switch ($script:Hover) {
-            'tab:standard' { $script:Tab = 'standard'; $form.Invalidate() }
-            'tab:core'     { $script:Tab = 'core'; $form.Invalidate() }
             'refresh'      { Start-Refresh }
             'open'         { Start-Process $UsageUrl; $form.Hide() }
+        }
+        # Tab clicks dispatch through the registry (no literal per-tab cases);
+        # switching tabs also resizes the popup to the tab's content height.
+        if ($script:Hover -like 'tab:*') {
+            $id = $script:Hover.Substring(4)
+            if ((Get-TabRegistry).Contains($id)) {
+                $script:Tab = $id
+                $form.ClientSize = Get-PopupSize
+                $form.Invalidate()
+            }
         }
     } catch { Write-Log "click: $_" }
 })
@@ -422,6 +519,7 @@ $Popup.Add_MouseClick({ param($form, $e)
 function Show-Popup {
     if ($script:Popup.Visible) { $script:Popup.Hide(); return }
     if (((Get-Date) - $script:HiddenAt).TotalMilliseconds -lt 300) { return }   # the icon click that just closed it
+    $script:Popup.ClientSize = Get-PopupSize   # content-aware height may have changed since last shown
     $sz = $script:Popup.Size
     $cur = [Windows.Forms.Cursor]::Position
     $wa = [Windows.Forms.Screen]::FromPoint($cur).WorkingArea

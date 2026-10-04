@@ -230,6 +230,34 @@ function Set-ComputersResult($res) {
 function Get-Computers { return $script:Computers }
 function Get-ComputersError { return $script:ComputersError }
 
+# ---------------------------------------------------------------- tabs (popup header)
+
+# Single source of truth for the popup header tabs: id -> label + width at
+# scale 1.0 (the GUI scales widths by its DPI factor). droid-bar.ps1 renders
+# the header pills, the hit-test rects and the click switch from this registry,
+# replacing the old duplicated $tabs array and literal switch cases.
+# 'computer' is deliberately NOT a $Pools key: $Pools doubles as the
+# Test-Alerts allowlist and Computer must never receive notifications.
+$Tabs = [ordered]@{
+    standard = @{ label = $Pools['standard']; width = 86 }
+    core     = @{ label = $Pools['core'];     width = 100 }
+    computer = @{ label = 'Computer';         width = 86 }
+}
+
+function Get-TabRegistry { return $Tabs }
+
+# Formats the Computer tab summary line, e.g. '3 computers · 3 active'.
+# Singular noun for a single machine; an empty or missing list reads
+# 'No computers'. Case-insensitive on the status name (via Get-ComputerSummary).
+function Format-ComputerSummary($Computers) {
+    $s = Get-ComputerSummary $Computers
+    if ($s.Total -eq 0) { return 'No computers' }
+    $noun = if ($s.Total -eq 1) { 'computer' } else { 'computers' }
+    $active = 0
+    if ($s.Counts.Contains('active')) { $active = $s.Counts['active'] }
+    return ('{0} {1} · {2} active' -f $s.Total, $noun, $active)
+}
+
 # ---------------------------------------------------------------- alerts
 
 # Computes threshold crossings for every window of every notify pool and updates
@@ -306,4 +334,4 @@ function Set-FetchError([string]$msg) { $script:LastError = $msg }
 function Get-LastUpdated { return $script:Updated }
 function Set-LastUpdated($t) { $script:Updated = $t }
 
-Export-ModuleMember -Function Write-Log, ConvertTo-Hashtable, Get-MemberValue, Get-AlertState, ConvertTo-LocalTime, Get-WinInfo, Get-PoolMax, Format-Pct, Format-Remaining, Set-FetchResult, Test-Alerts, Get-TrayLook, ConvertTo-ComputerList, Get-ComputerSummary, Get-ComputerStatusColor, Set-ComputersResult, Get-Computers, Get-ComputersError, Initialize-LibState, Set-LibConfig, Get-UsageData, Get-FetchError, Set-FetchError, Get-LastUpdated, Set-LastUpdated -Variable Pools, Windows, Short
+Export-ModuleMember -Function Write-Log, ConvertTo-Hashtable, Get-MemberValue, Get-AlertState, ConvertTo-LocalTime, Get-WinInfo, Get-PoolMax, Format-Pct, Format-Remaining, Set-FetchResult, Test-Alerts, Get-TrayLook, ConvertTo-ComputerList, Get-ComputerSummary, Get-ComputerStatusColor, Format-ComputerSummary, Set-ComputersResult, Get-Computers, Get-ComputersError, Get-TabRegistry, Initialize-LibState, Set-LibConfig, Get-UsageData, Get-FetchError, Set-FetchError, Get-LastUpdated, Set-LastUpdated -Variable Pools, Windows, Short
