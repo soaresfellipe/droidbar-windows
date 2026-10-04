@@ -4,7 +4,9 @@
 **Audit date:** 2026-10-04
 **Rubric:** Factory Agent Readiness — 84 criteria (40 Application scope, 44 Repository scope)
 **Commit audited:** `main` @ `52450c0`, plus the gates and this report landed via PR #15
-(`fc018a5`). CI on `main` was green before and after the PR.
+(`fc018a5`). CI on `main` was green before and after the PR. The dependabot
+configuration and the programmatically derived counts below were corrected via
+PR #17.
 
 ---
 
@@ -58,7 +60,7 @@ Each row: `signal = numerator/denominator`. 44 Repository + 40 Application = 84.
 | 3 | build_cmd_doc | **1/1** | AGENTS.md + README "Build": `build.ps1` with the exact command. |
 | 4 | deps_pinned | **1/1** | Zero runtime deps. Pester 5.7.1 and PSSA 1.25.0 `-RequiredVersion` in CI. Actions SHA-pinned. |
 | 5 | vcs_cli_tools | **1/1** | `gh auth status`: authenticated as `soaresfellipe`, scopes `repo`, `workflow`. |
-| 6 | automated_pr_review | 0/1 | `gh pr list --state all`: 0 reviews, 0 comments across all 14 PRs. |
+| 6 | automated_pr_review | 0/1 | `gh pr list --state all`: 0 reviews, 0 comments across all 17 PRs. |
 | 7 | agentic_development | **1/1** | `Co-Authored-By: Claude Opus 5.5` in history; `.factory/skills/` (2 skills). |
 | 8 | fast_ci_feedback | **1/1** | 12 merged-PR `ci` checks, 40–59 s each (avg 53 s), far under 10 min. |
 | 9 | build_performance_tracking | 0/1 | No caching or build metrics; only raw run durations. |
@@ -88,11 +90,11 @@ Each row: `signal = numerator/denominator`. 44 Repository + 40 Application = 84.
 | 33 | secret_scanning | **1/1** | GitHub secret scanning: 200, `[]`. Plus `-Check secrets` in CI + pre-commit. |
 | 34 | codeowners | **1/1** | `.github/CODEOWNERS`: `* @soaresfellipe`. |
 | 35 | automated_security_review | 0/1 | Code scanning: 404 "no analysis found"; no review bot. |
-| 36 | dependency_update_automation | **1/1** | `.github/dependabot.yml`: weekly `github-actions` + `powershell` updates. |
+| 36 | dependency_update_automation | **1/1** | `.github/dependabot.yml`: weekly `github-actions` updates (the only supported ecosystem for this repo's moving parts). |
 | 37 | gitignore_comprehensive | **1/1** | Verified ignored: `.env`, `build/`, `target/`, `node_modules/`, `.vscode/`, `.idea/`, `.DS_Store`, `*.zip`, `*.user`. `.env.example` tracked. |
 | 38 | privacy_compliance | **1/1** | No telemetry by design; README Privacy + single-host invariant documented. |
 | 39 | secrets_management | **1/1** | DPAPI per-user encryption; key never logged/committed; enforced by tests + scan. |
-| 40 | min_release_age | **1/1** | Dependabot `min_release_age_days: 7` on both ecosystems. |
+| 40 | min_release_age | **1/1** | Dependabot `cooldown: default-days: 7` on the `github-actions` ecosystem. |
 | 41 | issue_templates | **1/1** | `.github/ISSUE_TEMPLATE/`: `bug_report.md`, `feature_request.md`. |
 | 42 | issue_labeling_system | **1/1** | 22 labels: `p0`–`p3`, `type/*`, `area/*`, plus GitHub defaults. |
 | 43 | backlog_health | N/A | Skipped: 0 open issues, so the >70% threshold has no population. |
@@ -176,7 +178,7 @@ no CI, no tests, no `AGENTS.md`, no branch protection, no `.github/`.
 | Release | manual | Tag-triggered workflow; v1.1.0 published with a verified zip |
 | Branch protection | none | `main-protect` ruleset, `ci` required, zero bypass actors |
 | Secret scanning | none | GitHub native (0 alerts) + `secrets` gate over worktree and history |
-| Dependency updates | manual | Dependabot, weekly, 7-day release-age delay |
+| Dependency updates | manual | Dependabot: weekly `github-actions` updates, 7-day cooldown |
 | Gates | 3 ad-hoc | 7 named gates, shared by CI and the pre-commit hook |
 | Skills | none | `.factory/skills/`: `droid-bar-validation`, `droid-bar-triage` |
 
@@ -196,7 +198,7 @@ verified by running the gate locally and in CI, not by inspection alone.
 | env_template | `.env.example` |
 | skills | `.factory/skills/` (2 skills, valid frontmatter) |
 | dependency_update_automation | `.github/dependabot.yml` |
-| min_release_age | `min_release_age_days: 7` |
+| min_release_age | `cooldown: default-days: 7` |
 | runbooks_documented | README "Troubleshooting" + `droid-bar-triage` skill |
 | deps_pinned | CI `-RequiredVersion` pins; actions SHA-pinned |
 
@@ -261,16 +263,16 @@ their own merits, not excused here.
 
 | Check | Result |
 | --- | --- |
-| All mission PRs merged via `gh` | PRs #1–#15 merged; 14 merge commits on `main` |
-| This report landed via a PR | PR #15, merged as `fc018a5` after a green `ci` run |
-| Latest `main` CI run green | `ci` run `37189008707` — success, 1m19s |
-| Every `main` CI run green | 12/12 runs on `main` concluded `success` |
+| All mission PRs merged via `gh` | PRs #1–#17 merged; 16 merge commits on `main` (PR #12's recorded merge commit `52cfe9f` is not a merge commit — see the provenance note) |
+| This report landed via a PR | Initially PR #15, merged as `fc018a5`; the dependabot fix and the count corrections below via PR #17 |
+| Latest `main` CI run green | The `ci` run for the merge of PR #17 — success (previous latest: run `37189434544`, the PR #16 merge, success) |
+| Every `main` CI run green | 14/14 runs on `main` concluded `success` (through the merge of PR #17) |
 | Release v1.1.0 | Published with `DroidBar-v1.1.0.zip`; zip verified to contain all 5 entries incl. `src/droid-bar-lib.psm1` |
 | Branch protection active | Ruleset `main-protect` (24447470), `enforcement: active`, no bypass actors |
 | Key-shaped material in tracked files | **zero** matches for the key-shaped pattern (key prefix + 8 or more key characters) |
 | Key-shaped material in git history | **zero** matches across `git log -p --all` |
 | Bare key prefix, app code | Exactly 2: the UI prompt literal in `droid-bar.ps1:550`, the negative assertion in `tests/Computers.Tests.ps1:231` |
-| Bare key prefix, tooling and this report | 4 further occurrences, all inert: the `secrets`-gate regex in `tools/RepoChecks.ps1:184`, and three lines in this report that quote the regex so the scan is reproducible. No key material. |
+| Bare key prefix, tooling and this report | 3 further occurrences, all inert: the `secrets`-gate regex in `tools/RepoChecks.ps1:184`, and two lines in this report's evidence commands that quote the regex so the scan is reproducible. No key material. |
 | Local gates | `-Check all` exit 0; `Test-Docs.ps1` exit 0 |
 | Computer tab render | PNG downloaded from a `main` run and visually inspected: 3-row list, color-coded chips, summary line |
 
@@ -283,19 +285,26 @@ Claiming a strictly clean PR-only history would be inaccurate. Recording it prec
 
 It is a single-parent commit whose parent is `0287458` (the PR #11 merge). It landed
 inside the propagation window after the `main-protect` ruleset was created — it was
-pushed as an empirical verification probe of whether the new ruleset was enforcing yet,
-and it was reverted by PR #14 (`52450c0`) shortly afterward, with the same content
-re-landed properly through PR #12.
+pushed as an empirical verification probe of whether the new ruleset was enforcing
+yet. It was **not** reverted: its content stayed on `main`, and **PR #12**
+(`headRefOid` and `mergeCommit` both `52cfe9f`, merged 2026-10-04T07:24:30Z) is the
+audit's record of that change.
 
-The provenance for that content is **PR #12** (`headRefOid` and `mergeCommit` both
-`52cfe9f`, merged 2026-10-04T07:24:30Z), which is the audit's record of the change.
-Every commit after `52cfe9f` reached `main` through a merged PR: the only two
-non-merge commits in `52cfe9f..main` are `a8454a1` (probe, via PR #13) and `b65905b`
-(its revert, via PR #14).
+What PR #14 (`52450c0`) reverted was a separate, later probe: PR #13 merged
+`a8454a1` ("Probe merge gating", a two-line AGENTS.md marker whose parent is
+`52cfe9f`) as merge commit `2909268`, and PR #14 landed `b65905b`, which reverts
+`2909268` — the probe merge, not `52cfe9f` itself.
+
+Every commit after `52cfe9f` reached `main` through a merged PR. The 8 non-merge
+commits in `52cfe9f..main` (`git rev-list --no-merges 52cfe9f..main`) are the probe
+`a8454a1` and its revert `b65905b` (PRs #13/#14), `6dba0c5` and `69ae33c` (PR #15),
+`f5ae707` and `e797bdd` (PR #16), and the two commits of PR #17: `f0cbef0` (the
+dependabot correction) and the commit that lands these count fixes.
 
 So the accurate statement is: **every change is attributable to a merged PR, and one
-commit (`52cfe9f`) physically bypassed the PR requirement during a deliberate,
-immediately-reverted verification probe.**
+commit (`52cfe9f`) physically bypassed the PR requirement during a deliberate
+verification probe; the later probe commit (`a8454a1`) was reverted by PR #14, while
+`52cfe9f` itself remained on `main`.**
 
 ## Evidence commands
 
