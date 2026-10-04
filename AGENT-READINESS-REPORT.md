@@ -3,7 +3,8 @@
 **Repository:** `soaresfellipe/droidbar-windows` (public, default branch `main`)
 **Audit date:** 2026-10-04
 **Rubric:** Factory Agent Readiness — 84 criteria (40 Application scope, 44 Repository scope)
-**Commit audited:** `main` @ `52450c0` plus the gates commit `6dba0c5` on this branch
+**Commit audited:** `main` @ `52450c0`, plus the gates and this report landed via PR #15
+(`fc018a5`). CI on `main` was green before and after the PR.
 
 ---
 
@@ -260,16 +261,18 @@ their own merits, not excused here.
 
 | Check | Result |
 | --- | --- |
-| All mission PRs merged via `gh` | PRs #1–#14 merged; 13 merge commits on `main` |
-| Latest `main` CI run green | `ci` run `37186059433` — success, 54 s |
-| Every `main` CI run green | 11/11 runs on `main` concluded `success` |
+| All mission PRs merged via `gh` | PRs #1–#15 merged; 14 merge commits on `main` |
+| This report landed via a PR | PR #15, merged as `fc018a5` after a green `ci` run |
+| Latest `main` CI run green | `ci` run `37189008707` — success, 1m19s |
+| Every `main` CI run green | 12/12 runs on `main` concluded `success` |
 | Release v1.1.0 | Published with `DroidBar-v1.1.0.zip`; zip verified to contain all 5 entries incl. `src/droid-bar-lib.psm1` |
 | Branch protection active | Ruleset `main-protect` (24447470), `enforcement: active`, no bypass actors |
 | Key-shaped material in tracked files | **zero** matches for the key-shaped pattern (key prefix + 8 or more key characters) |
 | Key-shaped material in git history | **zero** matches across `git log -p --all` |
-| Bare key prefix occurrences | Exactly 2: the UI prompt literal in `droid-bar.ps1:550`, the negative assertion in `tests/Computers.Tests.ps1:231` |
+| Bare key prefix, app code | Exactly 2: the UI prompt literal in `droid-bar.ps1:550`, the negative assertion in `tests/Computers.Tests.ps1:231` |
+| Bare key prefix, tooling and this report | 4 further occurrences, all inert: the `secrets`-gate regex in `tools/RepoChecks.ps1:184`, and three lines in this report that quote the regex so the scan is reproducible. No key material. |
 | Local gates | `-Check all` exit 0; `Test-Docs.ps1` exit 0 |
-| Computer tab render | PNG downloaded from the latest `main` run and visually inspected: 3-row list, color-coded chips, summary line |
+| Computer tab render | PNG downloaded from a `main` run and visually inspected: 3-row list, color-coded chips, summary line |
 
 ## Provenance note — one commit did not arrive via a PR
 
