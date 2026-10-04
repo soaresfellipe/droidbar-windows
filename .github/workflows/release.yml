@@ -60,10 +60,13 @@ jobs:
           }
 
       # Auto-generated release notes (previous tag..current tag) plus the zip.
-      # gh is preinstalled on the GitHub runners and uses GITHUB_TOKEN, which
-      # the `contents: write` permission above grants to this job.
+      # gh is preinstalled on the GitHub runners; GH_TOKEN is the built-in
+      # GITHUB_TOKEN, which the `contents: write` permission above grants to
+      # this job. gh refuses to authenticate in Actions unless GH_TOKEN is set.
       - name: Publish GitHub Release
         shell: cmd
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: >
           gh release create "%GITHUB_REF_NAME%"
           "DroidBar-%GITHUB_REF_NAME%.zip"
