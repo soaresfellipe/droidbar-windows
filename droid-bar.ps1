@@ -95,25 +95,35 @@ Set-LibConfig -Config $script:Cfg
 $script:Fetch = $null
 
 function Get-LimitsUrl { return ($script:Cfg.apiBase.TrimEnd('/') + '/api/billing/limits') }
+function Get-ComputersUrl { return ($script:Cfg.apiBase.TrimEnd('/') + '/api/v0/computers') }
 
+# One background job fetches both endpoints with the same Bearer key and returns
+# @{ limits = <result>; computers = <result> } so a computers failure can never
+# take the limits display down (each half carries its own ok/status/error).
 $FetchScript = {
-    param($url, $key)
+    param($limitsUrl, $computersUrl, $key)
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    try {
-        $r = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 20 -Headers @{ Authorization = "Bearer $key"; Accept = 'application/json' }
-        $body = [Text.Encoding]::UTF8.GetString($r.RawContentStream.ToArray())
-        return @{ ok = $true; body = $body }
-    } catch {
-        $status = $null
-        if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
-        return @{ ok = $false; status = $status; error = $_.Exception.Message }
+    function Get-RemoteJson($url) {
+        try {
+            $r = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 20 -Headers @{ Authorization = "Bearer $key"; Accept = 'application/json' }
+            return @{ ok = $true; body = [Text.Encoding]::UTF8.GetString($r.RawContentStream.ToArray()) }
+        } catch {
+            $status = $null
+            if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
+            return @{ ok = $false; status = $status; error = $_.Exception.Message }
+        }
     }
+    return @{ limits = (Get-RemoteJson $limitsUrl); computers = (Get-RemoteJson $computersUrl) }
 }
 
 function Start-Refresh {
     if ($script:Fetch) { return }
     if ($Mock) {
-        Set-FetchResult @{ ok = $true; body = (Get-Content $Mock -Raw -Encoding UTF8) }
+        # Same file feeds both endpoints: mock.json carries the limits windows and
+        # the computers array (real-API shape parity).
+        $body = (Get-Content $Mock -Raw -Encoding UTF8)
+        Set-FetchResult @{ ok = $true; body = $body }
+        Set-ComputersResult @{ ok = $true; body = $body }
         Show-Alerts
         Update-Ui
         return
@@ -125,7 +135,7 @@ function Start-Refresh {
         return
     }
     $ps = [powershell]::Create()
-    [void]$ps.AddScript($FetchScript).AddArgument((Get-LimitsUrl)).AddArgument($key)
+    [void]$ps.AddScript($FetchScript).AddArgument((Get-LimitsUrl)).AddArgument((Get-ComputersUrl)).AddArgument($key)
     $script:Fetch = @{ ps = $ps; handle = $ps.BeginInvoke() }
     if ($script:Popup -and $script:Popup.Visible) { $script:Popup.Invalidate() }
 }
@@ -136,7 +146,10 @@ function Complete-Refresh {
     $script:Fetch = $null
     try {
         $out = $f.ps.EndInvoke($f.handle)
-        Set-FetchResult $out[0]
+        Set-FetchResult $out[0].limits
+        # Computers failures are contained: Set-ComputersResult only touches the
+        # computers state, so the limits display keeps working either way.
+        Set-ComputersResult $out[0].computers
         if (-not (Get-FetchError)) { Show-Alerts }
     } catch {
         Set-FetchError 'Failed to query the API'
@@ -331,13 +344,17 @@ function New-TrayBitmap([string]$text, $bg, $fg, [int]$sz) {
 if ($Dump) {
     $key = Get-ApiKey
     if (-not $key) { Write-Error 'No API key (set FACTORY_API_KEY or configure it in the app)'; exit 1 }
-    $r = & $FetchScript (Get-LimitsUrl) $key
-    if ($r.ok) { $r.body } else { "Failed: HTTP $($r.status) $($r.error)" }
+    $r = & $FetchScript (Get-LimitsUrl) (Get-ComputersUrl) $key
+    if ($r.limits.ok) { $r.limits.body } else { "Failed: HTTP $($r.limits.status) $($r.limits.error)" }
     exit 0
 }
 
 if ($Preview) {
-    if ($Mock) { Set-FetchResult @{ ok = $true; body = (Get-Content $Mock -Raw -Encoding UTF8) } }
+    if ($Mock) {
+        $body = (Get-Content $Mock -Raw -Encoding UTF8)
+        Set-FetchResult @{ ok = $true; body = $body }
+        Set-ComputersResult @{ ok = $true; body = $body }
+    }
     Set-LastUpdated (Get-Date)
     $script:S = 1.0
     $sz = Get-PopupSize
@@ -449,12 +466,13 @@ function Show-KeyDialog {
 
     if ($dlg.ShowDialog() -eq 'OK' -and $box.Text.Trim()) {
         $key = $box.Text.Trim()
-        $test = & $FetchScript (Get-LimitsUrl) $key
-        if (-not $test.ok -and ($test.status -eq 401 -or $test.status -eq 403)) {
-            [void][Windows.Forms.MessageBox]::Show('Factory rejected this key (HTTP ' + $test.status + ').', 'Droid Bar', 'OK', 'Warning')
+        $test = & $FetchScript (Get-LimitsUrl) (Get-ComputersUrl) $key
+        if (-not $test.limits.ok -and ($test.limits.status -eq 401 -or $test.limits.status -eq 403)) {
+            [void][Windows.Forms.MessageBox]::Show('Factory rejected this key (HTTP ' + $test.limits.status + ').', 'Droid Bar', 'OK', 'Warning')
         } else {
             Set-ApiKey $key
-            Set-FetchResult $test
+            Set-FetchResult $test.limits
+            Set-ComputersResult $test.computers
             Update-Ui
         }
     }
