@@ -6,7 +6,7 @@
 **Commit audited:** `main` @ `52450c0`, plus the gates and this report landed via PR #15
 (`fc018a5`). CI on `main` was green before and after the PR. The dependabot
 configuration and the programmatically derived counts below were corrected via
-PR #17.
+PR #17, and the end-state counts were refreshed post-merge via PR #19.
 
 ---
 
@@ -60,9 +60,9 @@ Each row: `signal = numerator/denominator`. 44 Repository + 40 Application = 84.
 | 3 | build_cmd_doc | **1/1** | AGENTS.md + README "Build": `build.ps1` with the exact command. |
 | 4 | deps_pinned | **1/1** | Zero runtime deps. Pester 5.7.1 and PSSA 1.25.0 `-RequiredVersion` in CI. Actions SHA-pinned. |
 | 5 | vcs_cli_tools | **1/1** | `gh auth status`: authenticated as `soaresfellipe`, scopes `repo`, `workflow`. |
-| 6 | automated_pr_review | 0/1 | `gh pr list --state all`: 0 reviews, 0 comments across all 17 PRs. |
+| 6 | automated_pr_review | 0/1 | `gh pr list --state all`: 0 reviews, 0 comments across all 19 PRs. |
 | 7 | agentic_development | **1/1** | `Co-Authored-By: Claude Opus 5.5` in history; `.factory/skills/` (2 skills). |
-| 8 | fast_ci_feedback | **1/1** | 12 merged-PR `ci` checks, 40–59 s each (avg 53 s), far under 10 min. |
+| 8 | fast_ci_feedback | **1/1** | The first 14 `ci` runs on `main` took 41–97 s each (avg 63 s), far under 10 min. |
 | 9 | build_performance_tracking | 0/1 | No caching or build metrics; only raw run durations. |
 | 10 | deployment_frequency | 0/1 | 2 releases in ~2 days; no multi-per-week cadence yet. |
 | 11 | single_command_setup | **1/1** | `pwsh -File tools\RepoChecks.ps1 -Check all` = clone-to-green. |
@@ -263,10 +263,10 @@ their own merits, not excused here.
 
 | Check | Result |
 | --- | --- |
-| All mission PRs merged via `gh` | PRs #1–#17 merged; 16 merge commits on `main` (PR #12's recorded merge commit `52cfe9f` is not a merge commit — see the provenance note) |
-| This report landed via a PR | Initially PR #15, merged as `fc018a5`; the dependabot fix and the count corrections below via PR #17 |
-| Latest `main` CI run green | The `ci` run for the merge of PR #17 — success (previous latest: run `37189434544`, the PR #16 merge, success) |
-| Every `main` CI run green | 14/14 runs on `main` concluded `success` (through the merge of PR #17) |
+| All mission PRs merged via `gh` | PRs #1–#17 and #19 merged (18 of 19 total; PR #18 is Dependabot's first actions-bump proposal, left open); 17 merge commits on `main` (PR #12's recorded merge commit `52cfe9f` is not a merge commit — see the provenance note) |
+| This report landed via a PR | Initially PR #15, merged as `fc018a5`; the dependabot fix and count corrections via PR #17; the post-merge count refresh via PR #19 |
+| Latest `main` CI run green | The `ci` run for the merge of PR #19 — success (prior: run `37190263472`, the PR #17 merge, and Dependabot's config-validation run `37190266365`, both success) |
+| Every `main` CI run green | 15/15 `ci` runs on `main` concluded `success` (through the merge of PR #19); Dependabot's dynamic runs are tracked separately and are also green |
 | Release v1.1.0 | Published with `DroidBar-v1.1.0.zip`; zip verified to contain all 5 entries incl. `src/droid-bar-lib.psm1` |
 | Branch protection active | Ruleset `main-protect` (24447470), `enforcement: active`, no bypass actors |
 | Key-shaped material in tracked files | **zero** matches for the key-shaped pattern (key prefix + 8 or more key characters) |
@@ -295,11 +295,10 @@ What PR #14 (`52450c0`) reverted was a separate, later probe: PR #13 merged
 `52cfe9f`) as merge commit `2909268`, and PR #14 landed `b65905b`, which reverts
 `2909268` — the probe merge, not `52cfe9f` itself.
 
-Every commit after `52cfe9f` reached `main` through a merged PR. The 8 non-merge
-commits in `52cfe9f..main` (`git rev-list --no-merges 52cfe9f..main`) are the probe
-`a8454a1` and its revert `b65905b` (PRs #13/#14), `6dba0c5` and `69ae33c` (PR #15),
-`f5ae707` and `e797bdd` (PR #16), and the two commits of PR #17: `f0cbef0` (the
-dependabot correction) and the commit that lands these count fixes.
+Every commit after `52cfe9f` reached `main` through a merged PR. The 9 non-merge
+commits in `52cfe9f..main` (`git rev-list --no-merges 52cfe9f..main`) all arrived on
+merged branches: the probe `a8454a1` and its revert `b65905b` (PRs #13/#14), the
+branch commits of PRs #15–#17, and one branch commit in PR #19.
 
 So the accurate statement is: **every change is attributable to a merged PR, and one
 commit (`52cfe9f`) physically bypassed the PR requirement during a deliberate
