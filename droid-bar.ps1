@@ -642,7 +642,12 @@ function Update-Ui {
         else { $tip = 'Droid · loading…' }
         if ($tip.Length -gt 63) { $tip = $tip.Substring(0, 63) }
         $script:Tray.Text = $tip
-        if ($script:Popup.Visible) { $script:Popup.Invalidate() }
+        if ($script:Popup.Visible) {
+            # A refresh can change the machine count, so re-apply the content-aware
+            # size before repainting (else rows can paint over divider/footer).
+            $script:Popup.ClientSize = Get-PopupSize
+            $script:Popup.Invalidate()
+        }
     } catch { Write-Log "ui: $_" }
 }
 

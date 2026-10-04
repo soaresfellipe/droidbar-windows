@@ -3,34 +3,34 @@
     "standard": {
       "fiveHour": {
         "usedPercent": 58,
-        "windowEnd": "2026-10-02T17:46:56.3848730+00:00",
+        "windowEnd": "2026-10-04T11:14:28.2072230+00:00",
         "secondsRemaining": 15988
       },
       "weekly": {
         "usedPercent": 40,
-        "windowEnd": "2026-10-04T23:35:56.3848729+00:00",
+        "windowEnd": "2026-10-05T17:48:00.2072230+00:00",
         "secondsRemaining": 126000
       },
       "monthly": {
         "usedPercent": 20,
-        "windowEnd": "2026-10-27T21:11:56.3848729+00:00",
+        "windowEnd": "2026-10-28T07:48:00.2072230+00:00",
         "secondsRemaining": 2077200
       }
     },
     "core": {
       "fiveHour": {
         "usedPercent": 92,
-        "windowEnd": "2026-10-02T17:03:56.3848730+00:00",
+        "windowEnd": "2026-10-04T09:31:20.2072230+00:00",
         "secondsRemaining": 9800
       },
       "weekly": {
         "usedPercent": 15,
-        "windowEnd": "2026-10-04T23:35:56.3848729+00:00",
+        "windowEnd": "2026-10-05T17:48:00.2072230+00:00",
         "secondsRemaining": 126000
       },
       "monthly": {
         "usedPercent": 4,
-        "windowEnd": "2026-10-27T21:11:56.3848729+00:00",
+        "windowEnd": "2026-10-28T07:48:00.2072230+00:00",
         "secondsRemaining": 2077200
       }
     }

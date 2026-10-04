@@ -212,7 +212,20 @@ function Set-ComputersResult($res) {
     if (Get-MemberValue $res 'ok') {
         try {
             $payload = $res.body | ConvertFrom-Json
-            $script:Computers = ConvertTo-ComputerList $payload
+            # Raw property access here: Get-MemberValue enumerates its output, so
+            # an empty array would collapse to $null and a single-element array to
+            # its item, hiding the distinction the shape check below needs.
+            $prop = $payload.PSObject.Properties['computers']
+            $computers = $null
+            if ($null -ne $prop) { $computers = $prop.Value }
+            # Shape check: a 200 without a list-shaped 'computers' property is an
+            # unexpected response, not a successful empty account (which is
+            # "computers": []). An empty array must still render 'No computers'.
+            if ($null -eq $computers -or -not ($computers -is [System.Collections.IList])) {
+                $script:ComputersError = 'Unexpected computers response'
+            } else {
+                $script:Computers = ConvertTo-ComputerList $payload
+            }
         } catch {
             $script:ComputersError = 'Unexpected computers response'
             Write-Log "computers json: $_"

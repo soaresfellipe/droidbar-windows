@@ -146,6 +146,36 @@ Describe 'Set-ComputersResult' {
         Get-Computers | Should -BeNullOrEmpty
     }
 
+    It 'maps a 200 body without the computers property to an unexpected-response error' {
+        Reset-ComputerTest
+        Set-TestComputers '{"extraUsageBalanceCents": 0}'
+        Get-ComputersError | Should -Be 'Unexpected computers response'
+        Get-Computers | Should -BeNullOrEmpty
+    }
+
+    It 'maps a 200 body with a wrong-typed computers property to an unexpected-response error' {
+        Reset-ComputerTest
+        Set-TestComputers '{"computers": "nope"}'
+        Get-ComputersError | Should -Be 'Unexpected computers response'
+        Get-Computers | Should -BeNullOrEmpty
+        Reset-ComputerTest
+        Set-TestComputers '{"computers": 5}'
+        Get-ComputersError | Should -Be 'Unexpected computers response'
+        Get-Computers | Should -BeNullOrEmpty
+        Reset-ComputerTest
+        Set-TestComputers '{"computers": {"name": "bench01"}}'
+        Get-ComputersError | Should -Be 'Unexpected computers response'
+        Get-Computers | Should -BeNullOrEmpty
+    }
+
+    It 'still accepts a legitimate empty computers array on a 200' {
+        Reset-ComputerTest
+        Set-TestComputers '{"computers": []}'
+        Get-ComputersError | Should -BeNullOrEmpty
+        @(Get-Computers).Count | Should -Be 0
+        Format-ComputerSummary (Get-Computers) | Should -Be 'No computers'
+    }
+
     It 'maps HTTP 401/403 to an invalid-key message' {
         Reset-ComputerTest
         Set-ComputersResult @{ ok = $false; status = 401 }
