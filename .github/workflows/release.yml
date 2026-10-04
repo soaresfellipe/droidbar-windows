@@ -53,11 +53,32 @@ jobs:
           Copy-Item (Join-Path $root 'LICENSE')                 $pkg
 
           Add-Type -AssemblyName System.IO.Compression.FileSystem
-          [System.IO.Compression.ZipFile]::CreateFromDirectory($pkg, $zip)
+          # Build the archive entry-by-entry with explicit forward-slash names:
+          # CreateFromDirectory on .NET Framework 4 writes 'src\file.psm1' with a
+          # backslash, which is a non-portable entry name (Windows-only unzip).
+          $arc = [System.IO.Compression.ZipFile]::Open($zip, [System.IO.Compression.ZipArchiveMode]::Create)
+          try {
+            foreach ($name in 'DroidBar.exe', 'droid-bar.ps1', 'src/droid-bar-lib.psm1', 'README.md', 'LICENSE') {
+              $entry = $arc.CreateEntry($name, [System.IO.Compression.CompressionLevel]::Optimal)
+              $src = [System.IO.File]::OpenRead((Join-Path $pkg $name))
+              try {
+                $dst = $entry.Open()
+                try { $src.CopyTo($dst) } finally { $dst.Dispose() }
+              } finally { $src.Dispose() }
+            }
+          } finally { $arc.Dispose() }
+
           Write-Host "packed $zip"
-          foreach ($e in [System.IO.Compression.ZipFile]::OpenRead($zip).Entries) {
-            Write-Host "  $($e.FullName) ($($e.Length) bytes)"
-          }
+          $check = [System.IO.Compression.ZipFile]::OpenRead($zip)
+          try {
+            foreach ($e in $check.Entries) { Write-Host "  $($e.FullName) ($($e.Length) bytes)" }
+            $missing = @('DroidBar.exe', 'droid-bar.ps1', 'src/droid-bar-lib.psm1', 'README.md', 'LICENSE') |
+              Where-Object { $_ -notin @($check.Entries | ForEach-Object { $_.FullName }) }
+            if ($missing.Count -gt 0) {
+              Write-Host "::error::zip is missing: $($missing -join ', ')"
+              exit 1
+            }
+          } finally { $check.Dispose() }
 
       # Auto-generated release notes (previous tag..current tag) plus the zip.
       # gh is preinstalled on the GitHub runners; GH_TOKEN is the built-in
