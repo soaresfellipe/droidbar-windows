@@ -6,6 +6,23 @@ A small Windows tray app that shows your [Factory](https://factory.ai) Droid usa
 
 > Unofficial. Not affiliated with or endorsed by Factory. It reads the same `/api/billing/limits` endpoint the Droid CLI uses. That endpoint isn't documented and may change.
 
+## What's new in v1.1.0
+
+The current release is **v1.1.0** (see [Releases](https://github.com/soaresfellipe/droidbar-windows/releases)).
+
+- **Computer tab** — a third popup tab listing your Droid Computers with a summary line
+  (e.g. `3 computers · 3 active`) and one row per machine: name, provider type and a color-coded
+  status chip (active, paused, provisioning, failed, unknown). It is **status only**: the API exposes
+  **no hours balance** for Droid Computers, because their compute counts toward the Standard windows
+  that the Standard tab already meters. If the computers call fails, the tab shows an unavailable
+  state and the Standard / Droid Core tabs keep working.
+- **`-PreviewTab <id>` developer flag** — renders a specific tab (`standard`, `core`, `computer`)
+  to PNG for CI artifact review.
+- **The release zip now ships `src/droid-bar-lib.psm1`**, the GUI-free helper module the script
+  imports at runtime, so the zip layout matches what the code expects.
+- Repo hygiene from the Agent-Readiness work: `AGENTS.md`, Pester suite, PSScriptAnalyzer settings,
+  CI workflow, contribution templates and CODEOWNERS.
+
 ## Features
 
 - **Tray icon with your current usage.** It shows the highest Standard percentage and changes color as you approach the limit: dark below 75%, orange from 75%, red from 90%. Hover it for a summary.
@@ -50,7 +67,17 @@ All settings and state live in `%APPDATA%\droid-bar\` (see [Configuration](#conf
 
 ## Install
 
-1. Download `DroidBar-vX.Y.Z.zip` from [Releases](https://github.com/soaresfellipe/droidbar-windows/releases) and extract it anywhere (e.g. `C:\Tools\DroidBar`). Keep `DroidBar.exe`, `droid-bar.ps1` and the `src\` folder (which contains `droid-bar-lib.psm1`) together — the zip already has this layout.
+1. Download `DroidBar-v1.1.0.zip` from [Releases](https://github.com/soaresfellipe/droidbar-windows/releases) and extract it anywhere (e.g. `C:\Tools\DroidBar`). The zip has this layout — keep it intact:
+
+   ```text
+   DroidBar.exe
+   droid-bar.ps1
+   src\droid-bar-lib.psm1
+   README.md
+   LICENSE
+   ```
+
+   `droid-bar.ps1` imports `src\droid-bar-lib.psm1` at startup, so the `src\` folder must stay next to the script.
 2. Run `DroidBar.exe`.
 3. On first run it asks for a **Factory API key**. Create one at [app.factory.ai/settings/api-keys](https://app.factory.ai/settings/api-keys).
 4. Optional: right-click the icon and check **Start with Windows**.
