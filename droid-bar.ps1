@@ -14,6 +14,7 @@ param(
     [switch]$Dump
 )
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -54,6 +55,19 @@ function ConvertTo-Hashtable($obj) {
     $h = @{}
     if ($null -ne $obj) { foreach ($p in $obj.PSObject.Properties) { $h[$p.Name] = $p.Value } }
     return $h
+}
+
+# Strict-mode-safe member access: returns $null when the property (or dictionary key)
+# does not exist instead of throwing. Required because Set-StrictMode turns references
+# to non-existent properties into terminating errors, and API/mock JSON is dynamic.
+function Get-MemberValue($obj, [string]$name) {
+    if ($null -eq $obj) { return $null }
+    if ($obj -is [System.Collections.IDictionary]) {
+        if ($obj.Contains($name)) { return $obj[$name] } else { return $null }
+    }
+    $p = $obj.PSObject.Properties[$name]
+    if ($null -ne $p) { return $p.Value }
+    return $null
 }
 
 function Get-Config {
@@ -119,14 +133,18 @@ function ConvertTo-LocalTime($v) {
 
 function Get-WinInfo([string]$pool, [string]$key) {
     $info = @{ Pct = $null; End = $null; Active = $false }
-    if (-not $script:Data -or -not $script:Data.limits) { return $info }
-    $p = $script:Data.limits.$pool
-    if (-not $p) { return $info }
-    $w = $p.$key
-    if (-not $w) { return $info }
+    # Dynamic JSON lookups go through Get-MemberValue so missing pool/window keys
+    # (e.g. limits.notAvailable) yield $null instead of a strict-mode property error.
+    $limits = Get-MemberValue $script:Data 'limits'
+    if ($null -eq $limits) { return $info }
+    $p = Get-MemberValue $limits $pool
+    if ($null -eq $p) { return $info }
+    $w = Get-MemberValue $p $key
+    if ($null -eq $w) { return $info }
     $pct = 0.0
-    if ($null -ne $w.usedPercent) { $pct = [double]$w.usedPercent }
-    $end = ConvertTo-LocalTime $w.windowEnd
+    $used = Get-MemberValue $w 'usedPercent'
+    if ($null -ne $used) { $pct = [double]$used }
+    $end = ConvertTo-LocalTime (Get-MemberValue $w 'windowEnd')
     $info.End = $end
     if ($end) {
         $info.Active = $end -ge (Get-Date)
@@ -185,24 +203,25 @@ $FetchScript = {
 }
 
 function Set-FetchResult($res) {
-    if ($res.ok) {
+    if (Get-MemberValue $res 'ok') {
         try {
             $script:Data = $res.body | ConvertFrom-Json
             $script:LastError = $null
             $script:Updated = Get-Date
-            if ($script:Data.limits.notAvailable) { $script:LastError = 'Limits unavailable for this account' }
+            $limits = Get-MemberValue $script:Data 'limits'
+            if (Get-MemberValue $limits 'notAvailable') { $script:LastError = 'Limits unavailable for this account' }
         } catch {
             $script:LastError = 'Unexpected API response'
-            Write-Log "json: $_ :: $($res.body)"
+            Write-Log "json: $_ :: $(Get-MemberValue $res 'body')"
         }
-    } elseif ($res.status -eq 401 -or $res.status -eq 403) {
+    } elseif ((Get-MemberValue $res 'status') -eq 401 -or (Get-MemberValue $res 'status') -eq 403) {
         $script:LastError = 'Invalid API key or missing permission'
-    } elseif ($res.status) {
-        $script:LastError = "HTTP error $($res.status)"
+    } elseif (Get-MemberValue $res 'status') {
+        $script:LastError = "HTTP error $(Get-MemberValue $res 'status')"
     } else {
         $script:LastError = "Can't reach Factory"
     }
-    if ($script:LastError) { Write-Log "$($script:LastError) $($res.error)" }
+    if ($script:LastError) { Write-Log "$($script:LastError) $(Get-MemberValue $res 'error')" }
 }
 
 function Start-Refresh {
@@ -390,7 +409,7 @@ function Draw-Popup($g, [int]$W, [int]$H) {
     $status = if (-not $script:Data) { '' }
               elseif ($exhausted) { "$($Pools[$script:Tab]) limit reached." }
               else { "You are using $($Pools[$script:Tab]) Usage." }
-    if ($script:Data -and $script:Data.extraUsageBalanceCents -gt 0) {
+    if ($script:Data -and ((Get-MemberValue $script:Data 'extraUsageBalanceCents') -gt 0)) {
         $status += '  Extra usage: ' + ('${0:0.00}' -f ($script:Data.extraUsageBalanceCents / 100))
     }
     Draw-Text $g $status $F.Small $pad ($y - [int](6 * $s)) $C.Muted
@@ -499,27 +518,27 @@ $corner = 2
 [void][DBNative]::DwmSetWindowAttribute($Popup.Handle, 33, [ref]$corner, 4)   # rounded corners (Win11)
 $script:HiddenAt = [datetime]::MinValue
 
-$Popup.Add_Paint({ param($sender, $e)
-    try { Draw-Popup $e.Graphics $sender.ClientSize.Width $sender.ClientSize.Height } catch { Write-Log "paint: $_" }
+$Popup.Add_Paint({ param($form, $e)
+    try { Draw-Popup $e.Graphics $form.ClientSize.Width $form.ClientSize.Height } catch { Write-Log "paint: $_" }
 })
 $Popup.Add_Deactivate({ $script:Popup.Hide(); $script:HiddenAt = Get-Date })
-$Popup.Add_KeyDown({ param($sender, $e) if ($e.KeyCode -eq 'Escape') { $sender.Hide() } })
-$Popup.Add_MouseMove({ param($sender, $e)
+$Popup.Add_KeyDown({ param($form, $e) if ($e.KeyCode -eq 'Escape') { $form.Hide() } })
+$Popup.Add_MouseMove({ param($form, $e)
     $hover = $null
     foreach ($k in $script:Hit.Keys) { if ($script:Hit[$k].Contains($e.Location)) { $hover = $k } }
     if ($hover -ne $script:Hover) {
         $script:Hover = $hover
-        $sender.Cursor = if ($hover) { [Windows.Forms.Cursors]::Hand } else { [Windows.Forms.Cursors]::Default }
-        $sender.Invalidate()
+        $form.Cursor = if ($hover) { [Windows.Forms.Cursors]::Hand } else { [Windows.Forms.Cursors]::Default }
+        $form.Invalidate()
     }
 })
-$Popup.Add_MouseClick({ param($sender, $e)
+$Popup.Add_MouseClick({ param($form, $e)
     try {
         switch ($script:Hover) {
-            'tab:standard' { $script:Tab = 'standard'; $sender.Invalidate() }
-            'tab:core'     { $script:Tab = 'core'; $sender.Invalidate() }
+            'tab:standard' { $script:Tab = 'standard'; $form.Invalidate() }
+            'tab:core'     { $script:Tab = 'core'; $form.Invalidate() }
             'refresh'      { Start-Refresh }
-            'open'         { Start-Process $UsageUrl; $sender.Hide() }
+            'open'         { Start-Process $UsageUrl; $form.Hide() }
         }
     } catch { Write-Log "click: $_" }
 })
@@ -619,7 +638,7 @@ $menu.Items.Add('Quit').Add_Click({
     [Windows.Forms.Application]::Exit()
 })
 $Tray.ContextMenuStrip = $menu
-$Tray.Add_MouseClick({ param($sender, $e) if ($e.Button -eq 'Left') { Show-Popup } })
+$Tray.Add_MouseClick({ param($form, $e) if ($e.Button -eq 'Left') { Show-Popup } })
 $Tray.Add_BalloonTipClicked({ Show-Popup })
 
 function Update-Ui {
