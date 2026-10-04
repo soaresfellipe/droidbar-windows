@@ -59,8 +59,11 @@ Protocol for changes that touch rendering or data logic:
 - **Pester** (suite in `tests/`, pinned 5.7.1):
   `Import-Module Pester -RequiredVersion 5.7.1; Invoke-Pester -Path tests -Output Detailed -CI`
 - **Lint** (PSScriptAnalyzer, settings in `PSScriptAnalyzerSettings.psd1`):
-  `Invoke-ScriptAnalyzer -Path droid-bar.ps1,src/droid-bar-lib.psm1 -Settings PSScriptAnalyzerSettings.psd1`
-  — zero Error-severity findings required; every suppression carries a justification.
+  `Invoke-ScriptAnalyzer -Path droid-bar.ps1 -Settings PSScriptAnalyzerSettings.psd1`
+  (also lint `src/droid-bar-lib.psm1` once it exists — pass one path per call)
+  — zero Error-severity findings required; every rule excluded in the settings file
+  carries a justification comment (DPAPI key path, intentional silent catches, `Draw-*`
+  GUI helpers, `Write-Log`, fixed event-handler signatures, positional internal calls).
 - **Syntax gate**: `[System.Management.Automation.Language.Parser]::ParseFile` must report
   zero errors for every `.ps1`/`.psm1` file (CI enforces this on PowerShell 5.1).
 - All three gates run in CI (`.github/workflows/ci.yml`) on every PR and push to `main`.
@@ -86,6 +89,8 @@ All under `%APPDATA%\droid-bar\`:
   (the lib module must import cleanly on pwsh/Linux for unit testing).
 - **Verb-Noun** function names (existing examples: `Get-WinInfo`, `Format-Pct`, `Draw-Popup`, `Test-Alerts`).
 - `Set-StrictMode -Version Latest` at the top of script and module — guard `$null` before property access.
+  Strict mode makes references to non-existent properties terminating errors, so dynamic
+  API/mock JSON members must be read via `Get-MemberValue` (returns `$null` when missing).
 - Pure/testable logic goes in `src/droid-bar-lib.psm1`; GUI, polling and P/Invoke stay in `droid-bar.ps1`.
 - English comments; comment intent where it is non-obvious.
 - **`TODO(#NN)` convention**: tracked tech debt uses `TODO(#123)` referencing a GitHub issue
