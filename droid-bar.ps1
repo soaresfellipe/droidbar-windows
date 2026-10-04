@@ -351,15 +351,18 @@ function Draw-ComputerView($g, [int]$W, [int]$H) {
 
     Draw-Text $g (Format-ComputerSummary $computers) $F.Label $pad $y $C.Text
     $y += [int](30 * $s)
-    foreach ($c in @($computers)) {
-        $name = $c['name']
-        $prov = $c['providerType']
+    # Loop variable is $machine, NOT $c: PowerShell variable names are
+    # case-insensitive and $c would shadow the $C color palette, breaking
+    # $C.Text under strict mode.
+    foreach ($machine in @($computers)) {
+        $name = $machine['name']
+        $prov = $machine['providerType']
         Draw-Text $g $name $F.Body $pad $y $C.Text
         $nw = (Measure-Text $name $F.Body).Width
         Draw-Text $g $prov $F.Small ($pad + $nw + [int](8 * $s)) ($y + [int](2 * $s)) $C.Muted
 
         # status chip: pill filled with the palette color, label right-aligned
-        $status = $c['status']
+        $status = $machine['status']
         $pal = Get-ComputerStatusColor $status
         $cc = $ChipColors[$pal]
         $cw = (Measure-Text $status $F.Small).Width + [int](14 * $s)
