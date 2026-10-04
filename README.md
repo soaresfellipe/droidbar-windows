@@ -14,6 +14,39 @@ A small Windows tray app that shows your [Factory](https://factory.ai) Droid usa
 - **Right-click menu**: refresh now, open the Factory dashboard, set API key, start with Windows, quit.
 - Nothing to install. It runs on Windows PowerShell 5.1 and .NET Framework, which ship with Windows 10/11.
 
+## How it works
+
+`DroidBar.exe` is a tiny C# host that runs `droid-bar.ps1` in-process (so Windows lists the app as "Droid Bar" instead of "Windows PowerShell"). The script polls the Factory API on a timer, keeps your API key encrypted with DPAPI, and does all the tray/popup/notification work.
+
+```mermaid
+flowchart TB
+    subgraph app["DroidBar.exe (Windows)"]
+        HOST["src/DroidBarHost.cs - tiny C# host compiled by build.ps1"]
+        SCRIPT["droid-bar.ps1 - PowerShell 5.1, runs in-process"]
+        LIB["src/droid-bar-lib.psm1 - GUI-free helpers (parsing, formatting, alert logic)"]
+        GUI["GUI - tray icon, popup with tabs, threshold notifications"]
+        SCRIPT --> LIB
+        SCRIPT --> GUI
+        HOST --> SCRIPT
+    end
+
+    subgraph files["Data files - %APPDATA%\\droid-bar\\"]
+        CFG["config.json - settings + DPAPI-protected API key"]
+        STATE["state.json - per-window alert levels"]
+        LOG["droid-bar.log - rotated log, never contains the key"]
+    end
+
+    subgraph api["https://api.factory.ai - only host the app talks to"]
+        LIMITS["GET /api/billing/limits - Standard and Droid Core windows, fiveHour / weekly / monthly"]
+        COMPUTERS["GET /api/v0/computers - Droid Computers list: name, status, providerType"]
+    end
+
+    SCRIPT -->|"Bearer key, every pollMinutes"| api
+    SCRIPT <-->|"read / write"| files
+```
+
+All settings and state live in `%APPDATA%\droid-bar\` (see [Configuration](#configuration)). The API key is only ever sent as a Bearer token to `api.factory.ai` — no telemetry, no other hosts. A fuller walkthrough lives in [docs/architecture.md](docs/architecture.md).
+
 ## Install
 
 1. Download `DroidBar-vX.Y.Z.zip` from [Releases](https://github.com/soaresfellipe/droidbar-windows/releases) and extract it anywhere (e.g. `C:\Tools\DroidBar`). Keep `DroidBar.exe` and `droid-bar.ps1` in the same folder.
