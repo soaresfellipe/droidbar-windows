@@ -20,6 +20,8 @@ $script:Cfg       = @{}     # app config slice (thresholds, notifyPools, trayPoo
 $script:Alerts    = @{}     # per-window alert levels, persisted to state.json
 $script:LastError = $null
 $script:Updated   = $null
+$script:Computers = $null   # parsed GET /api/v0/computers list (display-only)
+$script:ComputersError = $null
 $script:LogPath   = $null
 $script:StatePath = $null
 
@@ -146,6 +148,88 @@ function Set-FetchResult($res) {
     if ($script:LastError) { Write-Log "$($script:LastError) $(Get-MemberValue $res 'error')" }
 }
 
+# ---------------------------------------------------------------- computers (display-only)
+
+# Defensive parse of a GET /api/v0/computers payload into display entries
+# (name, status, providerType). Never throws: missing/ malformed data yields an
+# empty list, and non-object entries are skipped.
+function ConvertTo-ComputerList($payload) {
+    $list = New-Object System.Collections.Generic.List[hashtable]
+    if ($null -eq $payload) { return $list }
+    $computers = Get-MemberValue $payload 'computers'
+    if ($null -eq $computers) { return $list }
+    foreach ($c in @($computers)) {
+        if ($null -eq $c) { continue }
+        $isEntry = ($c -is [System.Collections.IDictionary]) -or ($c -is [System.Management.Automation.PSCustomObject])
+        if (-not $isEntry) { continue }
+        # String-coerce via Get-MemberValue so missing fields become '' instead of
+        # a strict-mode property error.
+        $list.Add(@{
+            name         = "$(Get-MemberValue $c 'name')"
+            status       = "$(Get-MemberValue $c 'status')"
+            providerType = "$(Get-MemberValue $c 'providerType')"
+        })
+    }
+    return $list
+}
+
+# Builds the Computer tab summary as data: Total plus per-status Counts
+# (unknown/missing statuses count under their own name / 'unknown').
+function Get-ComputerSummary($Computers) {
+    $counts = [ordered]@{}
+    $total = 0
+    foreach ($c in @($Computers)) {
+        if ($null -eq $c) { continue }
+        $total++
+        $st = "$(Get-MemberValue $c 'status')".ToLowerInvariant()
+        if ($st -eq '') { $st = 'unknown' }
+        if (-not $counts.Contains($st)) { $counts[$st] = 0 }
+        $counts[$st] = $counts[$st] + 1
+    }
+    return @{ Total = $total; Counts = $counts }
+}
+
+# Maps a computer status to a palette name (the GUI maps palette names to
+# System.Drawing colors, same contract as Get-TrayLook). Unknown statuses are
+# gray so a new server-side status can never break rendering.
+function Get-ComputerStatusColor([string]$status) {
+    switch ($status) {
+        'active'       { return 'green' }
+        'paused'       { return 'muted' }
+        'provisioning' { return 'orange' }
+        'failed'       { return 'red' }
+        default        { return 'gray' }
+    }
+}
+
+# Mirrors Set-FetchResult for the computers endpoint. Errors here are contained:
+# they never touch the limits state, so the limits display keeps working and the
+# Computer tab degrades to an unavailable state. Never logs the API key (the
+# module never receives it; only generic error text reaches the log).
+function Set-ComputersResult($res) {
+    $script:Computers = $null
+    $script:ComputersError = $null
+    if (Get-MemberValue $res 'ok') {
+        try {
+            $payload = $res.body | ConvertFrom-Json
+            $script:Computers = ConvertTo-ComputerList $payload
+        } catch {
+            $script:ComputersError = 'Unexpected computers response'
+            Write-Log "computers json: $_"
+        }
+    } elseif ((Get-MemberValue $res 'status') -eq 401 -or (Get-MemberValue $res 'status') -eq 403) {
+        $script:ComputersError = 'Invalid API key or missing permission'
+    } elseif (Get-MemberValue $res 'status') {
+        $script:ComputersError = "HTTP error $(Get-MemberValue $res 'status')"
+    } else {
+        $script:ComputersError = "Can't reach Factory"
+    }
+    if ($script:ComputersError) { Write-Log "computers: $($script:ComputersError) $(Get-MemberValue $res 'error')" }
+}
+
+function Get-Computers { return $script:Computers }
+function Get-ComputersError { return $script:ComputersError }
+
 # ---------------------------------------------------------------- alerts
 
 # Computes threshold crossings for every window of every notify pool and updates
@@ -222,4 +306,4 @@ function Set-FetchError([string]$msg) { $script:LastError = $msg }
 function Get-LastUpdated { return $script:Updated }
 function Set-LastUpdated($t) { $script:Updated = $t }
 
-Export-ModuleMember -Function Write-Log, ConvertTo-Hashtable, Get-MemberValue, Get-AlertState, ConvertTo-LocalTime, Get-WinInfo, Get-PoolMax, Format-Pct, Format-Remaining, Set-FetchResult, Test-Alerts, Get-TrayLook, Initialize-LibState, Set-LibConfig, Get-UsageData, Get-FetchError, Set-FetchError, Get-LastUpdated, Set-LastUpdated -Variable Pools, Windows, Short
+Export-ModuleMember -Function Write-Log, ConvertTo-Hashtable, Get-MemberValue, Get-AlertState, ConvertTo-LocalTime, Get-WinInfo, Get-PoolMax, Format-Pct, Format-Remaining, Set-FetchResult, Test-Alerts, Get-TrayLook, ConvertTo-ComputerList, Get-ComputerSummary, Get-ComputerStatusColor, Set-ComputersResult, Get-Computers, Get-ComputersError, Initialize-LibState, Set-LibConfig, Get-UsageData, Get-FetchError, Set-FetchError, Get-LastUpdated, Set-LastUpdated -Variable Pools, Windows, Short
