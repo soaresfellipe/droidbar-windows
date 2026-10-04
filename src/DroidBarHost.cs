@@ -12,8 +12,8 @@ using System.Windows.Forms;
 [assembly: AssemblyDescription("Droid Bar")]
 [assembly: AssemblyProduct("Droid Bar")]
 [assembly: AssemblyCompany("Droid Bar")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyFileVersion("1.1.0.0")]
 
 static class DroidBarHost
 {
