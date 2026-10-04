@@ -108,6 +108,30 @@ All under `%APPDATA%\droid-bar\`:
   `area/*` (subsystem).
 - The API key is a secret: never commit, echo, or log it.
 
+### Branch protection on `main` (enforced by ruleset)
+
+`main` is protected by the repository ruleset **`main-protect`** (ruleset id `24447470`),
+so the flow above is enforced by GitHub, not just by convention:
+
+| Rule | Effect |
+| --- | --- |
+| `pull_request` | Every change to `main` must arrive via a PR (merge, squash or rebase merge allowed). |
+| `required_status_checks` | The `ci` check (GitHub Actions workflow `ci`, integration id `15368`) must pass, and branches must be up to date with `main` before merging (`strict` policy). |
+| `non_fast_forward` | Force-pushes to `main` are rejected. |
+| `deletion` | Deleting `main` is rejected. |
+
+No bypass actors are configured (`current_user_can_bypass: never`), which includes repository
+admins: there is no "push anyway" escape hatch. If a change must bypass CI, amend the workflow
+rather than weakening the ruleset.
+
+Inspect or update it with:
+
+```bash
+# read back the ruleset (id is stable, name is the human handle)
+gh api repos/soaresfellipe/droidbar-windows/rulesets
+gh api repos/soaresfellipe/droidbar-windows/rulesets/24447470
+```
+
 ## Release steps
 
 1. Merge all feature work into `main` with green CI.
