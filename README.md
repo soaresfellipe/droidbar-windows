@@ -87,6 +87,34 @@ All settings and state live in `%APPDATA%\droid-bar\` (see [Configuration](#conf
 
 Windows SmartScreen may warn about the unsigned executable. You can also skip the exe and run the script directly (see below).
 
+## Upgrade an existing installation
+
+Your settings (`config.json`), API key, alert state and log live in `%APPDATA%\droid-bar\`, so
+upgrading never touches them:
+
+1. Download the new `DroidBar-vX.Y.Z.zip` from [Releases](https://github.com/soaresfellipe/droidbar-windows/releases).
+2. **Quit the running app first** (right-click the tray icon → **Quit**, or `Stop-Process -Name DroidBar`).
+   Windows locks the files of a running process, so extracting over it fails or leaves a mix of versions.
+3. Extract the zip over the install folder, keeping the layout intact (`src\droid-bar-lib.psm1` must
+   stay next to `droid-bar.ps1`).
+4. Run `DroidBar.exe` again.
+
+Two gotchas seen in practice:
+
+- **Restarting from a script or an agent session kills the app.** If an automation tool starts
+  `DroidBar.exe` from its own shell, the process is terminated when that shell session ends — the
+  tray icon never appears and nothing is logged. Launch it detached from the session instead:
+
+  ```powershell
+  Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = 'C:\Tools\DroidBar\DroidBar.exe' }
+  ```
+
+- **Installing into a git clone can dirty it.** The zip is built from the release tag, so its
+  `README.md` and `LICENSE` may differ from the current `main`. If your install folder is a clone,
+  prefer `git pull` + `build.ps1`, or expect those two files to show up as modified afterwards.
+  Either way, `droid-bar.ps1`, `DroidBar.exe` and `src\droid-bar-lib.psm1` from the zip are the
+  tested release artifacts.
+
 ## Configuration
 
 Settings live in `%APPDATA%\droid-bar\config.json` (right-click → **Open settings folder**). Restart the app after editing.

@@ -37,6 +37,22 @@ DroidBar.exe
 Install = extract the release zip anywhere and run `DroidBar.exe`. Nothing to install;
 the app ships as the zip only.
 
+### Upgrading an existing installation (agent-facing gotchas)
+
+When asked to upgrade an installed copy to a new release:
+
+- **Stop the running process before replacing files** (`Stop-Process -Name DroidBar`). A running
+  `DroidBar.exe` locks its files.
+- **Never leave the relaunch inside your own shell session.** A process started with
+  `Start-Process` from an agent's shell is killed when that session ends — the user sees no tray
+  icon and no log entry. Launch it detached, e.g.
+  `Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = '<install path>\DroidBar.exe' }`,
+  then verify the process survives a separate shell call before reporting success.
+- The release zip is built from the tag, so its `README.md`/`LICENSE` may differ from `main`;
+  expect that diff if the install folder is a git clone.
+- Validate the installed copy headlessly before handing it back:
+  `droid-bar.ps1 -Mock samples\mock.json -Preview out.png` must render without error.
+
 ## Validation protocol (developer flags)
 
 Use these flags to validate without the live GUI:
