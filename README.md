@@ -27,7 +27,7 @@ The current release is **v1.1.0** (see [Releases](https://github.com/soaresfelli
 
 ## Features
 
-- **Tray icon with your current usage.** It shows the highest Standard percentage and changes color as you approach the limit: dark below 75%, orange from 75%, red from 90%. Hover it for a summary.
+- **Tray icon with the Factory mark.** The icon is the Factory logo on a color-coded background that tracks your highest Standard window usage: dark below 75%, orange from 75%, red from 90% (and `…` while loading, `!` on errors). Hover it for the exact percentages.
 - **Popup on left click**, styled like Factory's own usage page, with Standard / Droid Core / Computer tabs and the time left until each window resets.
 - **Computer tab**, display-only: a summary line (e.g. `3 computers · 3 active`) and one row per Droid Computer with its name, provider type and a color-coded status chip. There is no hours balance for Droid Computers — their compute counts toward the Standard windows — so this tab shows status, not a meter. Computers never trigger notifications.
 - **Notifications** when a limit crosses 75%, 90% and 100% (once per threshold), and when a maxed-out limit becomes available again.
@@ -86,6 +86,34 @@ All settings and state live in `%APPDATA%\droid-bar\` (see [Configuration](#conf
 5. Optional: in *Settings → Personalization → Taskbar → Other system tray icons*, turn **Droid Bar** on so the icon is always visible.
 
 Windows SmartScreen may warn about the unsigned executable. You can also skip the exe and run the script directly (see below).
+
+## Upgrade an existing installation
+
+Your settings (`config.json`), API key, alert state and log live in `%APPDATA%\droid-bar\`, so
+upgrading never touches them:
+
+1. Download the new `DroidBar-vX.Y.Z.zip` from [Releases](https://github.com/soaresfellipe/droidbar-windows/releases).
+2. **Quit the running app first** (right-click the tray icon → **Quit**, or `Stop-Process -Name DroidBar`).
+   Windows locks the files of a running process, so extracting over it fails or leaves a mix of versions.
+3. Extract the zip over the install folder, keeping the layout intact (`src\droid-bar-lib.psm1` must
+   stay next to `droid-bar.ps1`).
+4. Run `DroidBar.exe` again.
+
+Two gotchas seen in practice:
+
+- **Restarting from a script or an agent session kills the app.** If an automation tool starts
+  `DroidBar.exe` from its own shell, the process is terminated when that shell session ends — the
+  tray icon never appears and nothing is logged. Launch it detached from the session instead:
+
+  ```powershell
+  Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = 'C:\Tools\DroidBar\DroidBar.exe' }
+  ```
+
+- **Installing into a git clone can dirty it.** The zip is built from the release tag, so its
+  `README.md` and `LICENSE` may differ from the current `main`. If your install folder is a clone,
+  prefer `git pull` + `build.ps1`, or expect those two files to show up as modified afterwards.
+  Either way, `droid-bar.ps1`, `DroidBar.exe` and `src\droid-bar-lib.psm1` from the zip are the
+  tested release artifacts.
 
 ## Configuration
 
