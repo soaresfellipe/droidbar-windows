@@ -61,5 +61,11 @@
       "createdAt": 1791233794007
     }
   ],
+  "orgUsageMs": 53210309,
+  "limitMs": 288000000,
+  "overageAllowed": false,
+  "overagePreference": false,
+  "periodStart": "2026-10-03T07:00:00.000Z",
+  "periodEnd": "2026-11-03T08:00:00.000Z",
   "extraUsageBalanceCents": 0
 }

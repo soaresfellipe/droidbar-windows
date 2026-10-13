@@ -7,6 +7,8 @@ Guidance for coding agents working in this repository.
 Droid Bar is a **Windows tray app** that shows your [Factory](https://factory.ai) Droid
 usage limits (5-hour, weekly, monthly — for **Standard** and **Droid Core**) and
 notifies you when you approach a limit. It polls `GET https://api.factory.ai/api/billing/limits`
+(Standard / Droid Core windows), `GET /api/v0/computers` (Droid Computers list, display-only)
+and `GET /api/organization/compute-usage` (org Managed Computers Usage card, display-only)
 with a DPAPI-protected API key, shows a tray icon (highest Standard percentage,
 color-coded), renders a dark popup with tabs, and fires threshold notifications
 (75% / 90% / 100%) once per threshold. No telemetry; the only host it talks to is `api.factory.ai`.
