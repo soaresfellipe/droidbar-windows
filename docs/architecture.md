@@ -3,8 +3,8 @@
 This is the architecture of Droid Bar today. The GUI-free helper module
 (`src/droid-bar-lib.psm1`) ships as part of the app and is covered by the Pester
 suite; the popup renders Standard / Droid Core / Computer tabs from a tab
-registry, and the Droid Computers fetch runs on the same poll cycle as the
-limits fetch.
+registry, and the Droid Computers and compute-usage fetches run on the same
+poll cycle as the limits fetch.
 
 ```mermaid
 flowchart TB
@@ -27,6 +27,7 @@ flowchart TB
     subgraph api["https://api.factory.ai - only host the app talks to"]
         LIMITS["GET /api/billing/limits - Standard and Droid Core windows, fiveHour / weekly / monthly"]
         COMPUTERS["GET /api/v0/computers - Droid Computers list: name, status, providerType"]
+        COMPUTEUSAGE["GET /api/organization/compute-usage - org compute hours: usage, included, cycle end"]
     end
 
     SCRIPT -->|"Bearer key, every pollMinutes"| api
@@ -48,9 +49,13 @@ flowchart TB
   hit-test rects and the click switch. The `computer` tab is registered there but is
   deliberately **not** a `$Pools` key, so it can never opt into notifications.
 - **The Computer tab is display-only**: the same poll cycle fetches `GET /api/v0/computers`
-  (contained errors: a computers failure never touches the limits display), and the tab
-  shows a summary line plus one row per machine (name, provider type, color-coded status
-  chip). The popup height is content-aware and grows with the machine list.
+  and `GET /api/organization/compute-usage` (contained errors: a computers or compute-usage
+  failure never touches the limits display). The tab leads with the **Managed Computers Usage**
+  card — percent of the org's included compute hours used, an always-orange bar, hours used /
+  included and the billing-cycle reset countdown, mirroring the Factory dashboard card — followed
+  by a summary line plus one row per machine (name, provider type, color-coded status chip).
+  When the usage call fails or the org has no usable quota, the card hides and the machine list
+  keeps rendering. The popup height is content-aware and grows with the machine list.
 - **`src/droid-bar-lib.psm1`** holds the GUI-free, testable helpers (parsing, formatting,
   alert computation, tray look). It imports cleanly on pwsh/Linux so the Pester suite can
   run anywhere; the release zip ships it alongside the script.

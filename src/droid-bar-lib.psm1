@@ -22,6 +22,8 @@ $script:LastError = $null
 $script:Updated   = $null
 $script:Computers = $null   # parsed GET /api/v0/computers list (display-only)
 $script:ComputersError = $null
+$script:ComputeUsage = $null     # parsed GET /api/organization/compute-usage (display-only)
+$script:ComputeUsageError = $null
 $script:LogPath   = $null
 $script:StatePath = $null
 
@@ -243,6 +245,82 @@ function Set-ComputersResult($res) {
 function Get-Computers { return $script:Computers }
 function Get-ComputersError { return $script:ComputersError }
 
+# ---------------------------------------------------------------- compute usage (display-only)
+
+# Defensive parse of a GET /api/organization/compute-usage payload into display
+# values (UsedMs, LimitMs, End). Mirrors Set-ComputersResult: errors here are
+# contained and never touch the limits or computers state; only generic error
+# text reaches the log (the module never receives the API key). Unknown extra
+# fields (overageAllowed, overagePreference, periodStart) are ignored.
+function Set-ComputeUsageResult($res) {
+    $script:ComputeUsage = $null
+    $script:ComputeUsageError = $null
+    if (Get-MemberValue $res 'ok') {
+        try {
+            $payload = $res.body | ConvertFrom-Json
+            $used = Get-MemberValue $payload 'orgUsageMs'
+            $limit = Get-MemberValue $payload 'limitMs'
+            # Shape check: both millisecond fields must be present for the usage
+            # card to be renderable. Anything else is an unexpected response
+            # (or an org without an included-hours quota), which then degrades
+            # silently instead of drawing a meaningless bar.
+            if ($null -eq $used -or $null -eq $limit) {
+                $script:ComputeUsageError = 'Unexpected compute usage response'
+            } else {
+                $script:ComputeUsage = @{
+                    UsedMs  = [double]$used
+                    LimitMs = [double]$limit
+                    End     = ConvertTo-LocalTime (Get-MemberValue $payload 'periodEnd')
+                }
+            }
+        } catch {
+            $script:ComputeUsageError = 'Unexpected compute usage response'
+            Write-Log "compute usage json: $_"
+        }
+    } elseif ((Get-MemberValue $res 'status') -eq 401 -or (Get-MemberValue $res 'status') -eq 403) {
+        $script:ComputeUsageError = 'Invalid API key or missing permission'
+    } elseif (Get-MemberValue $res 'status') {
+        $script:ComputeUsageError = "HTTP error $(Get-MemberValue $res 'status')"
+    } else {
+        $script:ComputeUsageError = "Can't reach Factory"
+    }
+    if ($script:ComputeUsageError) { Write-Log "compute usage: $($script:ComputeUsageError) $(Get-MemberValue $res 'error')" }
+}
+
+function Get-ComputeUsage { return $script:ComputeUsage }
+function Get-ComputeUsageError { return $script:ComputeUsageError }
+
+# Display math for the Managed Computers Usage card: percent of the included
+# compute hours plus the billing-cycle reset time. Pct is $null when there is
+# no usable quota (no parsed state, missing usage, limitMs <= 0), which the GUI
+# reads as "hide the whole section".
+function Get-ComputeUsageInfo {
+    $info = @{ Pct = $null; UsedMs = $null; LimitMs = $null; End = $null }
+    $u = $script:ComputeUsage
+    if ($null -eq $u) { return $info }
+    $limit = Get-MemberValue $u 'LimitMs'
+    if ($null -eq $limit -or [double]$limit -le 0) { return $info }
+    $used = Get-MemberValue $u 'UsedMs'
+    if ($null -eq $used) { $used = 0 }
+    # Clamp in double arithmetic: [math]::Max(0, <double>) binds to the
+    # (Int32, Int32) overload in PowerShell and would truncate the fraction.
+    $pct = [double]$used / [double]$limit * 100
+    if ($pct -lt 0) { $pct = 0.0 }
+    $info.Pct = $pct
+    $info.UsedMs = [double]$used
+    $info.LimitMs = [double]$limit
+    $info.End = Get-MemberValue $u 'End'
+    return $info
+}
+
+# Formats milliseconds as compact dashboard-style hours, e.g. 53210309 ->
+# '14.8h' (one decimal, invariant culture so a pt-BR host renders the same dot
+# the dashboard does). Null/missing input renders an em dash like Format-Pct.
+function Format-ComputeHours($ms) {
+    if ($null -eq $ms) { return '—' }
+    return [string]::Format([Globalization.CultureInfo]::InvariantCulture, '{0:0.0}h', ([double]$ms / 3600000))
+}
+
 # ---------------------------------------------------------------- tabs (popup header)
 
 # Single source of truth for the popup header tabs: id -> label + width at
@@ -347,4 +425,4 @@ function Set-FetchError([string]$msg) { $script:LastError = $msg }
 function Get-LastUpdated { return $script:Updated }
 function Set-LastUpdated($t) { $script:Updated = $t }
 
-Export-ModuleMember -Function Write-Log, ConvertTo-Hashtable, Get-MemberValue, Get-AlertState, ConvertTo-LocalTime, Get-WinInfo, Get-PoolMax, Format-Pct, Format-Remaining, Set-FetchResult, Test-Alerts, Get-TrayLook, ConvertTo-ComputerList, Get-ComputerSummary, Get-ComputerStatusColor, Format-ComputerSummary, Set-ComputersResult, Get-Computers, Get-ComputersError, Get-TabRegistry, Initialize-LibState, Set-LibConfig, Get-UsageData, Get-FetchError, Set-FetchError, Get-LastUpdated, Set-LastUpdated -Variable Pools, Windows, Short
+Export-ModuleMember -Function Write-Log, ConvertTo-Hashtable, Get-MemberValue, Get-AlertState, ConvertTo-LocalTime, Get-WinInfo, Get-PoolMax, Format-Pct, Format-Remaining, Set-FetchResult, Test-Alerts, Get-TrayLook, ConvertTo-ComputerList, Get-ComputerSummary, Get-ComputerStatusColor, Format-ComputerSummary, Set-ComputersResult, Get-Computers, Get-ComputersError, Set-ComputeUsageResult, Get-ComputeUsage, Get-ComputeUsageError, Get-ComputeUsageInfo, Format-ComputeHours, Get-TabRegistry, Initialize-LibState, Set-LibConfig, Get-UsageData, Get-FetchError, Set-FetchError, Get-LastUpdated, Set-LastUpdated -Variable Pools, Windows, Short

@@ -98,12 +98,14 @@ $script:Fetch = $null
 
 function Get-LimitsUrl { return ($script:Cfg.apiBase.TrimEnd('/') + '/api/billing/limits') }
 function Get-ComputersUrl { return ($script:Cfg.apiBase.TrimEnd('/') + '/api/v0/computers') }
+function Get-ComputeUsageUrl { return ($script:Cfg.apiBase.TrimEnd('/') + '/api/organization/compute-usage') }
 
-# One background job fetches both endpoints with the same Bearer key and returns
-# @{ limits = <result>; computers = <result> } so a computers failure can never
-# take the limits display down (each half carries its own ok/status/error).
+# One background job fetches all three endpoints with the same Bearer key and
+# returns @{ limits = <result>; computers = <result>; computeUsage = <result> }
+# so a computers or compute-usage failure can never take the limits display
+# down (each half carries its own ok/status/error).
 $FetchScript = {
-    param($limitsUrl, $computersUrl, $key)
+    param($limitsUrl, $computersUrl, $computeUsageUrl, $key)
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     function Get-RemoteJson($url) {
         try {
@@ -115,17 +117,18 @@ $FetchScript = {
             return @{ ok = $false; status = $status; error = $_.Exception.Message }
         }
     }
-    return @{ limits = (Get-RemoteJson $limitsUrl); computers = (Get-RemoteJson $computersUrl) }
+    return @{ limits = (Get-RemoteJson $limitsUrl); computers = (Get-RemoteJson $computersUrl); computeUsage = (Get-RemoteJson $computeUsageUrl) }
 }
 
 function Start-Refresh {
     if ($script:Fetch) { return }
     if ($Mock) {
-        # Same file feeds both endpoints: mock.json carries the limits windows and
-        # the computers array (real-API shape parity).
+        # Same file feeds all three endpoints: mock.json carries the limits windows,
+        # the computers array and the computeUsage object (real-API shape parity).
         $body = (Get-Content $Mock -Raw -Encoding UTF8)
         Set-FetchResult @{ ok = $true; body = $body }
         Set-ComputersResult @{ ok = $true; body = $body }
+        Set-ComputeUsageResult @{ ok = $true; body = $body }
         Show-Alerts
         Update-Ui
         return
@@ -137,7 +140,7 @@ function Start-Refresh {
         return
     }
     $ps = [powershell]::Create()
-    [void]$ps.AddScript($FetchScript).AddArgument((Get-LimitsUrl)).AddArgument((Get-ComputersUrl)).AddArgument($key)
+    [void]$ps.AddScript($FetchScript).AddArgument((Get-LimitsUrl)).AddArgument((Get-ComputersUrl)).AddArgument((Get-ComputeUsageUrl)).AddArgument($key)
     $script:Fetch = @{ ps = $ps; handle = $ps.BeginInvoke() }
     if ($script:Popup -and $script:Popup.Visible) { $script:Popup.Invalidate() }
 }
@@ -149,9 +152,11 @@ function Complete-Refresh {
     try {
         $out = $f.ps.EndInvoke($f.handle)
         Set-FetchResult $out[0].limits
-        # Computers failures are contained: Set-ComputersResult only touches the
-        # computers state, so the limits display keeps working either way.
+        # Computers and compute-usage failures are contained: Set-ComputersResult
+        # and Set-ComputeUsageResult only touch their own state, so the limits
+        # display keeps working either way.
         Set-ComputersResult $out[0].computers
+        Set-ComputeUsageResult $out[0].computeUsage
         if (-not (Get-FetchError)) { Show-Alerts }
     } catch {
         Set-FetchError 'Failed to query the API'
@@ -230,17 +235,22 @@ function New-RoundPath([Drawing.RectangleF]$r, [single]$rad) {
 }
 
 # Content-aware popup size: the Standard/Core view needs a fixed height for the
-# three usage bars; the Computer view grows with the number of machines and
-# keeps a compact floor when the list is empty or unavailable.
+# three usage bars; the Computer view grows with the Managed Computers Usage
+# card (when it renders) and with the number of machines, and keeps a compact
+# floor when the list is empty or unavailable.
 function Get-PopupSize {
     $s = $script:S
     if ($script:Tab -eq 'computer') {
+        # usage card (label row + bar + hours line + gap) only takes space when visible
+        $usageH = 0
+        $usage = Get-ComputeUsageInfo
+        if ($null -ne $usage.Pct) { $usageH = [int](64 * $s) }
         $computers = Get-Computers
         $n = 0
         if ($computers) { $n = @($computers).Count }
-        if ($n -eq 0) { return New-Object Drawing.Size([int](420 * $s), [int](180 * $s)) }
+        if ($n -eq 0) { return New-Object Drawing.Size([int](420 * $s), ([int](180 * $s) + $usageH)) }
         # header (72) + summary row + one 28px row per machine + footer (58)
-        $h = [int](150 * $s) + ([int](28 * $s) * $n)
+        $h = [int](150 * $s) + ([int](28 * $s) * $n) + $usageH
         return New-Object Drawing.Size([int](420 * $s), $h)
     }
     return New-Object Drawing.Size([int](420 * $s), [int](292 * $s))
@@ -337,14 +347,44 @@ function Draw-Popup($g, [int]$W, [int]$H) {
     $pen.Dispose()
 }
 
-# Computer tab body (display-only): summary line, then one row per machine —
-# name + provider type on the left, a status chip on the right. Unavailable or
-# empty data degrades to a single message line.
+# Computer tab body (display-only): the Managed Computers Usage card (when the
+# org has a usable quota), a summary line, then one row per machine — name +
+# provider type on the left, a status chip on the right. Unavailable or empty
+# data degrades to a single message line.
 function Draw-ComputerView($g, [int]$W, [int]$H) {
     $s = $script:S
     $pad = [int](22 * $s)
     $computers = Get-Computers
     $y = $pad + [int](50 * $s)
+
+    # Managed Computers Usage card (org compute quota per billing cycle), matching
+    # the dashboard's card: label + percent, always-orange bar, hours used /
+    # included, and the billing-cycle reset countdown. Hidden entirely when the
+    # usage fetch failed or the org has no usable quota — the machine list keeps
+    # rendering either way (same containment as the computers errors).
+    $usage = Get-ComputeUsageInfo
+    if ($null -ne $usage.Pct) {
+        $label = 'Managed Computers Usage'
+        Draw-Text $g $label $F.Label $pad $y $C.Text
+        $lw = (Measure-Text $label $F.Label).Width
+        Draw-Text $g (Format-Pct $usage.Pct) $F.Small ($pad + $lw + [int](8 * $s)) ($y + [int](1 * $s)) $C.Muted
+
+        $reset = [char]0x21BB + ' ' + (Format-Remaining $usage.End)
+        $rw = (Measure-Text $reset $F.Small).Width
+        Draw-Text $g $reset $F.Small ($W - $pad - $rw) ($y + [int](1 * $s)) $C.Muted
+
+        $barW = $W - 2 * $pad
+        $by = $y + [int](25 * $s); $bh = [int](8 * $s)
+        $g.FillRectangle((New-Object Drawing.SolidBrush($C.Track)), $pad, $by, $barW, $bh)
+        # Always orange, like the dashboard card (never switches to red).
+        $fw = [math]::Max([int](2 * $s), [int]($barW * [math]::Min(100, $usage.Pct) / 100))
+        $g.FillRectangle((New-Object Drawing.SolidBrush($C.Orange)), $pad, $by, $fw, $bh)
+
+        $hours = (Format-ComputeHours $usage.UsedMs) + ' / ' + (Format-ComputeHours $usage.LimitMs)
+        Draw-Text $g $hours $F.Small $pad ($by + $bh + [int](6 * $s)) $C.Muted
+        $y += [int](64 * $s)
+    }
+
     $err = Get-ComputersError
     if ($err) { Draw-Text $g ('Computers unavailable · ' + $err) $F.Small $pad $y $C.Red; return }
     if (-not $computers) { Draw-Text $g 'No computers' $F.Small $pad $y $C.Muted; return }
@@ -453,8 +493,9 @@ function New-TrayBitmap([string]$text, $bg, $fg, [int]$sz) {
 if ($Dump) {
     $key = Get-ApiKey
     if (-not $key) { Write-Error 'No API key (set FACTORY_API_KEY or configure it in the app)'; exit 1 }
-    $r = & $FetchScript (Get-LimitsUrl) (Get-ComputersUrl) $key
+    $r = & $FetchScript (Get-LimitsUrl) (Get-ComputersUrl) (Get-ComputeUsageUrl) $key
     if ($r.limits.ok) { $r.limits.body } else { "Failed: HTTP $($r.limits.status) $($r.limits.error)" }
+    if ($r.computeUsage.ok) { '--- compute-usage ---'; $r.computeUsage.body } else { "Compute usage failed: HTTP $($r.computeUsage.status) $($r.computeUsage.error)" }
     exit 0
 }
 
@@ -472,6 +513,7 @@ if ($Preview) {
         $body = (Get-Content $Mock -Raw -Encoding UTF8)
         Set-FetchResult @{ ok = $true; body = $body }
         Set-ComputersResult @{ ok = $true; body = $body }
+        Set-ComputeUsageResult @{ ok = $true; body = $body }
     }
     Set-LastUpdated (Get-Date)
     $script:S = 1.0
@@ -593,13 +635,14 @@ function Show-KeyDialog {
 
     if ($dlg.ShowDialog() -eq 'OK' -and $box.Text.Trim()) {
         $key = $box.Text.Trim()
-        $test = & $FetchScript (Get-LimitsUrl) (Get-ComputersUrl) $key
+        $test = & $FetchScript (Get-LimitsUrl) (Get-ComputersUrl) (Get-ComputeUsageUrl) $key
         if (-not $test.limits.ok -and ($test.limits.status -eq 401 -or $test.limits.status -eq 403)) {
             [void][Windows.Forms.MessageBox]::Show('Factory rejected this key (HTTP ' + $test.limits.status + ').', 'Droid Bar', 'OK', 'Warning')
         } else {
             Set-ApiKey $key
             Set-FetchResult $test.limits
             Set-ComputersResult $test.computers
+            Set-ComputeUsageResult $test.computeUsage
             Update-Ui
         }
     }

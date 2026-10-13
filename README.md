@@ -10,6 +10,15 @@ A small Windows tray app that shows your [Factory](https://factory.ai) Droid usa
 
 The current release is **v1.1.0** (see [Releases](https://github.com/soaresfellipe/droidbar-windows/releases)).
 
+### Unreleased
+
+- **Managed Computers Usage card** — the Computer tab now leads with the org's Managed
+  Computers Usage meter, matching the Factory dashboard card: percent of the included compute
+  hours used (e.g. `18%`), an always-orange bar, hours used / included (e.g. `14.8h / 80.0h`)
+  and the billing-cycle reset countdown (e.g. `↻ 20 days`). It reads the undocumented
+  `GET /api/organization/compute-usage` endpoint and hides itself when the account has no
+  usable quota or the call fails — the machine list keeps rendering either way.
+
 - **Computer tab** — a third popup tab listing your Droid Computers with a summary line
   (e.g. `3 computers · 3 active`) and one row per machine: name, provider type and a color-coded
   status chip (active, paused, provisioning, failed, unknown). It is **status only**: the API exposes
@@ -29,7 +38,12 @@ The current release is **v1.1.0** (see [Releases](https://github.com/soaresfelli
 
 - **Tray icon with the Factory mark.** The icon is the Factory logo on a color-coded background that tracks your highest Standard window usage: dark below 75%, orange from 75%, red from 90% (and `…` while loading, `!` on errors). Hover it for the exact percentages.
 - **Popup on left click**, styled like Factory's own usage page, with Standard / Droid Core / Computer tabs and the time left until each window resets.
-- **Computer tab**, display-only: a summary line (e.g. `3 computers · 3 active`) and one row per Droid Computer with its name, provider type and a color-coded status chip. There is no hours balance for Droid Computers — their compute counts toward the Standard windows — so this tab shows status, not a meter. Computers never trigger notifications.
+- **Computer tab**, display-only: the **Managed Computers Usage** card (percent, always-orange
+  bar, hours used / included and the reset countdown for the org's included compute per billing
+  cycle) above a summary line (e.g. `3 computers · 3 active`) and one row per Droid Computer with
+  its name, provider type and a color-coded status chip. When the usage call fails or the account
+  has no included-hours quota, the card hides and the tab keeps showing the machines. Computers
+  never trigger notifications.
 - **Notifications** when a limit crosses 75%, 90% and 100% (once per threshold), and when a maxed-out limit becomes available again.
 - **Right-click menu**: refresh now, open the Factory dashboard, set API key, start with Windows, quit.
 - Nothing to install. It runs on Windows PowerShell 5.1 and .NET Framework, which ship with Windows 10/11.
@@ -59,6 +73,7 @@ flowchart TB
     subgraph api["https://api.factory.ai - only host the app talks to"]
         LIMITS["GET /api/billing/limits - Standard and Droid Core windows, fiveHour / weekly / monthly"]
         COMPUTERS["GET /api/v0/computers - Droid Computers list: name, status, providerType"]
+        COMPUTEUSAGE["GET /api/organization/compute-usage - org compute hours: usage, included, cycle end"]
     end
 
     SCRIPT -->|"Bearer key, every pollMinutes"| api
