@@ -393,15 +393,17 @@ function Test-Alerts {
 # ---------------------------------------------------------------- tray look
 
 # Returns the tray icon look as plain data (palette names, no GDI types); the GUI
-# script maps gray/dark/orange/red/white to its System.Drawing colors.
+# script maps transparent/dark/orange/red/white to its System.Drawing colors.
+# The normal state (< 75%) has no badge fill (transparent background, the mark
+# sits directly on the taskbar); orange/red badge the alert thresholds.
 function Get-TrayLook {
     $pool = Get-MemberValue $script:Cfg 'trayPool'
     $max = Get-PoolMax $pool
     if (-not $script:Data -or $null -eq $max) {
         $t = if ($script:LastError) { '!' } else { '…' }
-        return @{ text = $t; bg = 'gray'; fg = 'white' }
+        return @{ text = $t; bg = 'transparent'; fg = 'white' }
     }
-    $bg = 'dark'
+    $bg = 'transparent'
     if ($max -ge 90) { $bg = 'red' } elseif ($max -ge 75) { $bg = 'orange' }
     return @{ text = ('{0:0}' -f [math]::Min(100, [math]::Floor($max))); bg = $bg; fg = 'white' }
 }

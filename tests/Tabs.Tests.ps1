@@ -109,6 +109,6 @@ Describe 'Tray look regression (Computer must not touch the tray)' {
         Set-ComputersResult @{ ok = $true; body = '{"computers": [{"name": "bench01", "providerType": "e2b", "status": "failed"}]}' }
         $look = Get-TrayLook
         $look.text | Should -Be '10'
-        $look.bg | Should -Be 'dark'
+        $look.bg | Should -Be 'transparent'
     }
 }

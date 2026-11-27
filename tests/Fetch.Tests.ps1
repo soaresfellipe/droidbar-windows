@@ -78,11 +78,11 @@ Describe 'Set-FetchResult' {
 }
 
 Describe 'Get-TrayLook' {
-    It 'shows the ellipsis on a dark gray icon when there is no data and no error' {
+    It 'shows the ellipsis on a transparent icon when there is no data and no error' {
         Reset-LibTest
         $look = Get-TrayLook
         $look.text | Should -Be '…'
-        $look.bg | Should -Be 'gray'
+        $look.bg | Should -Be 'transparent'
         $look.fg | Should -Be 'white'
     }
 
@@ -91,15 +91,15 @@ Describe 'Get-TrayLook' {
         Set-FetchError 'Can''t reach Factory'
         $look = Get-TrayLook
         $look.text | Should -Be '!'
-        $look.bg | Should -Be 'gray'
+        $look.bg | Should -Be 'transparent'
     }
 
-    It 'stays dark below 75%' {
+    It 'stays transparent below 75%' {
         Reset-LibTest
         Set-TestData '{"limits": {"standard": {"fiveHour": {"usedPercent": 42, "windowEnd": "2099-01-01T00:00:00.000Z"}}}}'
         $look = Get-TrayLook
         $look.text | Should -Be '42'
-        $look.bg | Should -Be 'dark'
+        $look.bg | Should -Be 'transparent'
     }
 
     It 'turns orange at 75% and red at 90%' {
@@ -109,7 +109,7 @@ Describe 'Get-TrayLook' {
 
         Reset-LibTest
         Set-TestData '{"limits": {"standard": {"fiveHour": {"usedPercent": 74, "windowEnd": "2099-01-01T00:00:00.000Z"}}}}'
-        (Get-TrayLook).bg | Should -Be 'dark'
+        (Get-TrayLook).bg | Should -Be 'transparent'
 
         Reset-LibTest
         Set-TestData '{"limits": {"standard": {"fiveHour": {"usedPercent": 90, "windowEnd": "2099-01-01T00:00:00.000Z"}}}}'
@@ -130,6 +130,6 @@ Describe 'Get-TrayLook' {
         Set-LibConfig -Config @{ thresholds = @(75, 90, 100); notifyPools = @('standard', 'core'); trayPool = 'core' }
         $look = Get-TrayLook
         $look.text | Should -Be '20'
-        $look.bg | Should -Be 'dark'
+        $look.bg | Should -Be 'transparent'
     }
 }
