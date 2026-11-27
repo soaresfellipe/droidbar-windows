@@ -34,7 +34,7 @@ The current release is **v1.1.0** (see [Releases](https://github.com/soaresfelli
 
 ## Features
 
-- **Tray icon with the Factory mark.** The icon is the Factory logo on a color-coded background that tracks your highest Standard window usage: dark below 75%, orange from 75%, red from 90% (and `…` while loading, `!` on errors). Hover it for the exact percentages.
+- **Tray icon with the Factory mark.** The white Factory logo sits straight on the taskbar (no background tile, dark variant on a light taskbar); when a Standard window crosses 75% the mark gains an orange rounded badge, and red from 90% (and `…` while loading, `!` on errors). Hover it for the exact percentages.
 - **Popup on left click**, styled like Factory's own usage page, with Standard / Droid Core / Computer tabs and the time left until each window resets.
 - **Computer tab**, display-only: the **Managed Computers Usage** card (percent, always-orange
   bar, hours used / included and the reset countdown for the org's included compute per billing
